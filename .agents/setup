@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Orb setup for Paddock: installs the stable Rust toolchain and warms the cargo cache.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+step() { printf '\n==> %s\n' "$*"; }
+
+if ! command -v rustup >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/rustup" ]; then
+  step "Installing rustup (stable, minimal profile)"
+  time curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --profile minimal --default-toolchain stable --component clippy,rustfmt
+fi
+
+# The installer cannot update this running script's environment.
+# shellcheck disable=SC1091
+source "$HOME/.cargo/env"
+
+# Make cargo available to Amp and supervised services, which start in login shells.
+profile_marker="# paddock: rust toolchain"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  printf '\n%s\n. "$HOME/.cargo/env"\n' "$profile_marker" >> "$HOME/.bash_profile"
+fi
+
+step "Fetching crate dependencies"
+time cargo fetch --locked 2>/dev/null || time cargo fetch
+
+step "Building (debug) to warm the target cache"
+time cargo build --all-targets
