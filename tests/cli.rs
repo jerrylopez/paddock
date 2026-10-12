@@ -69,5 +69,5 @@ fn missing_version_is_rejected() {
 fn setup_runs_the_embedded_service_script() {
     let output = paddock(&["setup", "php", "8.3"]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(stderr(&output).contains("paddock: setup for php 8.3 is not implemented yet"));
+    assert_eq!(stderr(&output), "paddock: php: not implemented yet\n");
 }

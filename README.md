@@ -4,9 +4,9 @@ Native environment setup for Amp orbs.
 
 ## Adding a service
 
-1. Write `scripts/<name>.sh`. Paddock runs it with bash after `scripts/common.sh`, passing
-   the version as `$1` and any extra flags after it. Output goes straight to the terminal,
-   and a non-zero exit fails `paddock setup`.
+1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):
+   safe to re-run, short output, sensible defaults, non-zero exit on failure. Paddock runs it
+   with bash after `scripts/common.sh`, which provides helpers for each of those rules.
 2. Register it in `SERVICES` in `src/dispatch.rs`: `service!("<name>", "<one-line description>")`.
    The script is embedded into the binary at compile time, so nothing is fetched at runtime.
 
