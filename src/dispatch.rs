@@ -1,11 +1,12 @@
 //! Routes a parsed command to the service that handles it.
 //!
 //! `SERVICES` is the single registry of what Paddock can set up. Adding a
-//! service means adding its install script and one entry here.
+//! service means adding `scripts/<name>.sh` and one `service!` entry here.
 
 use std::process::ExitCode;
 
 use crate::cli::{Command, SetupArgs};
+use crate::runner;
 
 /// A service Paddock knows how to set up.
 #[derive(Debug)]
@@ -14,21 +15,25 @@ pub struct Service {
     pub name: &'static str,
     /// One-line description shown in `paddock setup --help`.
     pub about: &'static str,
+    /// The service's install script, embedded at compile time.
+    pub script: &'static str,
+}
+
+/// Registers a service whose install script is `scripts/<name>.sh`.
+macro_rules! service {
+    ($name:literal, $about:literal) => {
+        Service {
+            name: $name,
+            about: $about,
+            script: include_str!(concat!("../scripts/", $name, ".sh")),
+        }
+    };
 }
 
 pub const SERVICES: &[Service] = &[
-    Service {
-        name: "php",
-        about: "PHP CLI and FPM",
-    },
-    Service {
-        name: "mysql",
-        about: "MySQL server",
-    },
-    Service {
-        name: "typesense",
-        about: "Typesense search server",
-    },
+    service!("php", "PHP CLI and FPM"),
+    service!("mysql", "MySQL server"),
+    service!("typesense", "Typesense search server"),
 ];
 
 pub fn service_names() -> impl Iterator<Item = &'static str> {
@@ -50,7 +55,7 @@ pub struct SetupJob {
 pub fn run(command: Command) -> ExitCode {
     match command {
         Command::Setup(args) => match resolve_setup(args) {
-            Ok(job) => setup(job),
+            Ok(job) => runner::run(&job),
             Err(message) => {
                 eprintln!("paddock: {message}");
                 ExitCode::FAILURE
@@ -69,17 +74,6 @@ fn resolve_setup(args: SetupArgs) -> Result<SetupJob, String> {
         version: args.version,
         flags: args.flags,
     })
-}
-
-fn setup(job: SetupJob) -> ExitCode {
-    // Install logic lands with the embedded-script runner (FRGE-8).
-    let mut request = format!("{} {}", job.service.name, job.version);
-    for flag in &job.flags {
-        request.push(' ');
-        request.push_str(flag);
-    }
-    eprintln!("paddock: setup for `{request}` is not implemented yet");
-    ExitCode::FAILURE
 }
 
 #[cfg(test)]
