@@ -12,14 +12,18 @@
 
 use std::env;
 use std::fmt::Write as _;
-use std::process::{Command, Output};
+use std::io::Write as _;
+use std::process::{Command, Output, Stdio};
 use std::sync::OnceLock;
 
 const DEFAULT_BASE_IMAGE: &str = "debian:bookworm-slim";
 
+const COMMON: &str = include_str!("../../scripts/common.sh");
+
 /// What a container run produced.
 pub struct Outcome {
     pub success: bool,
+    pub code: Option<i32>,
     pub stdout: String,
     pub stderr: String,
 }
@@ -28,6 +32,7 @@ impl Outcome {
     fn from_output(output: Output) -> Self {
         Self {
             success: output.status.success(),
+            code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         }
@@ -55,6 +60,31 @@ impl std::fmt::Display for Outcome {
 pub fn run(script: &str) -> Outcome {
     let output = docker(&["run", "--rm", image(), "sh", "-euc", script]);
     Outcome::from_output(output)
+}
+
+/// Runs `script` the way Paddock runs a service script, with `common.sh` in
+/// front and piped to bash, in a fresh container. The service is named `demo`.
+/// `docker_args` go to `docker run`, e.g. `&["--user", "1000"]`.
+pub fn run_service_script(script: &str, args: &[&str], docker_args: &[&str]) -> Outcome {
+    let mut command = Command::new("docker");
+    command
+        .args(["run", "--rm", "-i", "-e", "PADDOCK_SERVICE=demo"])
+        .args(docker_args)
+        .args([image(), "bash", "-s", "--"])
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().expect("could not run `docker`");
+    // Same shape as the runner's combined script (src/runner.rs).
+    let combined = format!("{{\n{COMMON}\n{script}\n}}\n");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(combined.as_bytes())
+        .unwrap();
+    Outcome::from_output(child.wait_with_output().unwrap())
 }
 
 /// Runs `paddock setup <service> <version> [flags]` twice in one fresh

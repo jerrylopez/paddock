@@ -1,11 +1,12 @@
 //! Runs a service's embedded install script.
 //!
 //! `common.sh` and the service script are joined into one script in memory and
-//! piped to `bash -s`, with the version and flags as positional arguments.
-//! bash inherits Paddock's stdout and stderr, so output appears live.
+//! piped to `bash -s`, with the version and flags as positional arguments and
+//! the service name in `PADDOCK_SERVICE`. bash inherits Paddock's stdout and
+//! stderr, so output appears live.
 
 use std::io::{self, Write};
-use std::process::{Command, ExitCode, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitCode, ExitStatus, Stdio};
 
 use crate::dispatch::SetupJob;
 
@@ -18,7 +19,7 @@ pub fn run(job: &SetupJob) -> ExitCode {
         .chain(job.flags.iter().map(String::as_str))
         .collect();
 
-    match run_script(&script, &args) {
+    match run_script(job.service.name, &script, &args) {
         Ok(status) => exit_code(status),
         Err(err) => {
             eprintln!("paddock: could not run bash: {err}");
@@ -35,22 +36,31 @@ fn combine(service_script: &str) -> String {
     format!("{{\n{COMMON}\n{service_script}\n}}\n")
 }
 
-fn run_script(script: &str, args: &[&str]) -> io::Result<ExitStatus> {
-    let mut child = Command::new("bash")
+fn run_script(service: &str, script: &str, args: &[&str]) -> io::Result<ExitStatus> {
+    let mut child = bash(service, args).spawn()?;
+    feed(&mut child, script)?;
+    child.wait()
+}
+
+/// A bash command that reads its script from stdin.
+fn bash(service: &str, args: &[&str]) -> Command {
+    let mut command = Command::new("bash");
+    command
         .args(["-s", "--"])
         .args(args)
-        .stdin(Stdio::piped())
-        .spawn()?;
+        .env("PADDOCK_SERVICE", service)
+        .stdin(Stdio::piped());
+    command
+}
 
+/// Writes `script` to the child's stdin and closes it.
+fn feed(child: &mut Child, script: &str) -> io::Result<()> {
     let mut stdin = child.stdin.take().expect("stdin is piped");
     match stdin.write_all(script.as_bytes()) {
         // bash stopped reading early (e.g. a syntax error); its exit status says why.
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => {}
-        result => result?,
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        result => result,
     }
-    drop(stdin);
-
-    child.wait()
 }
 
 fn exit_code(status: ExitStatus) -> ExitCode {
@@ -62,6 +72,9 @@ fn exit_code(status: ExitStatus) -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod contract_tests;
 
 #[cfg(test)]
 mod tests {
@@ -100,13 +113,13 @@ mod tests {
         let script = combine(
             r#"[ $# -eq 3 ] && [ "$1" = 8.3 ] && [ "$2" = --name ] && [ "$3" = "it's two words" ]"#,
         );
-        let status = run_script(&script, &["8.3", "--name", "it's two words"]).unwrap();
+        let status = run_script("test", &script, &["8.3", "--name", "it's two words"]).unwrap();
         assert!(status.success());
     }
 
     #[test]
     fn passes_through_the_exit_code() {
-        let status = run_script(&combine("exit 3"), &["1.0"]).unwrap();
+        let status = run_script("test", &combine("exit 3"), &["1.0"]).unwrap();
         assert_eq!(status.code(), Some(3));
         assert_eq!(exit_code(status), ExitCode::from(3));
     }
@@ -114,13 +127,13 @@ mod tests {
     #[test]
     fn common_settings_apply_to_the_service_script() {
         // `set -e` from common.sh stops the script at the first failing command.
-        let status = run_script(&combine("false\nexit 0"), &["1.0"]).unwrap();
+        let status = run_script("test", &combine("false\nexit 0"), &["1.0"]).unwrap();
         assert!(!status.success());
     }
 
     #[test]
     fn commands_reading_stdin_cannot_swallow_the_script() {
-        let status = run_script(&combine("cat >/dev/null\nexit 7"), &["1.0"]).unwrap();
+        let status = run_script("test", &combine("cat >/dev/null\nexit 7"), &["1.0"]).unwrap();
         assert_eq!(status.code(), Some(7));
     }
 }
