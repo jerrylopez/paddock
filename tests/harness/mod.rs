@@ -38,6 +38,18 @@ impl Outcome {
         }
     }
 
+    /// Output printed between the `== NAME` marker and the next marker.
+    pub fn section(&self, name: &str) -> &str {
+        let marker = format!("== {name}\n");
+        let start = self
+            .stdout
+            .find(&marker)
+            .unwrap_or_else(|| panic!("no `{name}` section\n{self}"))
+            + marker.len();
+        let rest = &self.stdout[start..];
+        &rest[..rest.find("== ").unwrap_or(rest.len())]
+    }
+
     /// Panics with the full container output unless the run exited 0.
     #[track_caller]
     pub fn assert_success(&self) -> &Self {
@@ -89,7 +101,9 @@ pub fn run_service_script(script: &str, args: &[&str], docker_args: &[&str]) -> 
 
 /// Runs `paddock setup <service> <version> [flags]` twice in one fresh
 /// container, then `verify`. The second run mirrors a stale snapshot re-running
-/// `.agents/setup`, so it must succeed too. Asserts every step exited 0.
+/// `.agents/setup`: everything is already installed, so it must succeed without
+/// apt (`apt` and `apt-get` fail during it). Asserts every step exited 0.
+/// Each step's output is available with `Outcome::section`.
 ///
 /// ```ignore
 /// harness::setup_twice_then_verify("php", "8.3", &[], "php -v | grep -q 'PHP 8.3'");
@@ -107,7 +121,12 @@ pub fn setup_twice_then_verify(
     }
     let script = format!(
         "echo '== setup (first run)'\n{setup}\n\
-         echo '== setup (second run)'\n{setup}\n\
+         mkdir -p /tmp/paddock-no-apt\n\
+         for tool in apt apt-get; do\n\
+           printf '#!/bin/sh\\necho \"$0 must not run on the second setup\" >&2\\nexit 99\\n' >/tmp/paddock-no-apt/$tool\n\
+           chmod +x /tmp/paddock-no-apt/$tool\n\
+         done\n\
+         echo '== setup (second run)'\nPATH=/tmp/paddock-no-apt:$PATH {setup}\n\
          echo '== verify'\n{verify}\n"
     );
     let outcome = run(&script);

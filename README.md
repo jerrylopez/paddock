@@ -2,6 +2,23 @@
 
 Native environment setup for Amp orbs.
 
+## Services
+
+### PHP
+
+```sh
+paddock setup php 8.3
+paddock setup php 8.4 --extensions redis,pdo_mysql
+```
+
+Installs the PHP CLI on Debian from [packages.sury.org](https://packages.sury.org/php/), Ondřej
+Surý's repository (the Debian counterpart of his Ubuntu PPA).
+
+- The version is major.minor (5.6 to 8.6 today); the repository provides the latest patch.
+- Default extensions: bcmath, curl, intl, mbstring, xml, zip. `--extensions` adds to them, using
+  the names `php -m` shows.
+- With several versions installed, `php` runs the one set up most recently.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):
