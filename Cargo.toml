@@ -8,3 +8,11 @@ publish = false
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+
+[features]
+# Builds the Docker-based container tests. Run them with `cargo container-tests`.
+container-tests = []
+
+[[test]]
+name = "container"
+required-features = ["container-tests"]

@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# Orb setup for Paddock: installs the stable Rust toolchain and warms the cargo cache.
+# Orb setup for Paddock: installs the stable Rust toolchain, the Docker buildx plugin
+# for the container test harness, and warms the cargo cache. The Docker daemon itself
+# runs as an orb service (.amp/services.yaml).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 step() { printf '\n==> %s\n' "$*"; }
+
+if ! docker buildx version >/dev/null 2>&1; then
+  step "Installing docker-buildx-plugin"
+  time sudo apt-get update -qq
+  time sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-buildx-plugin
+fi
 
 if ! command -v rustup >/dev/null 2>&1 && [ ! -x "$HOME/.cargo/bin/rustup" ]; then
   step "Installing rustup (stable, minimal profile)"

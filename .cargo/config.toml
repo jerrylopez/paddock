@@ -1,0 +1,3 @@
+[alias]
+# Docker-based container tests (tests/container.rs); needs a running Docker daemon.
+container-tests = "test --features container-tests --test container"
