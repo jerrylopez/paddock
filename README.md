@@ -26,6 +26,27 @@ Surý's repository (the Debian counterpart of his Ubuntu PPA), and
   is checked against the SHA-256 checksum getcomposer.org publishes.
 - With several versions installed, `php` runs the one set up most recently.
 
+### MySQL
+
+```sh
+paddock setup mysql 8.4
+paddock setup mysql 8.0 --database app --username app --password secret
+```
+
+Installs MySQL Community Server from [Oracle's APT repository](https://repo.mysql.com/apt/debian/).
+The download of Oracle's signing key is checked against its fingerprint.
+
+- The version picks a release series: `8.0`, `8.4`, `9.7` or `innovation`; the repository provides
+  the latest release in it. Switching an existing install to another series isn't supported.
+- `--database` creates a database. `--username` and `--password` create a user, with full access to
+  that database when `--database` is given.
+- Root logs in through the Unix socket (`sudo mysql`) unless you pass `--root-password`. Once root
+  has a password, later runs that change the database or users need `--root-password` too.
+- With systemd (orbs, servers), MySQL is enabled and started, and systemd starts it again after every
+  boot or orb wake. Without systemd (plain containers), it's installed and configured but not left
+  running.
+- Oracle publishes Debian packages for amd64 and i386 only, so ARM machines aren't supported.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

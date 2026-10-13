@@ -148,6 +148,12 @@ require_version() {
 
 # --- System ------------------------------------------------------------------
 
+# has_systemd: succeed if systemd manages this system (orbs, servers), as
+# opposed to a plain container.
+has_systemd() {
+  [ -d /run/systemd/system ]
+}
+
 # has_command NAME: succeed if NAME is on the PATH.
 has_command() {
   command -v "$1" >/dev/null 2>&1

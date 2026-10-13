@@ -67,9 +67,9 @@ fn missing_version_is_rejected() {
 
 #[test]
 fn setup_runs_the_embedded_service_script() {
-    let output = paddock(&["setup", "mysql", "8.4"]);
+    let output = paddock(&["setup", "typesense", "27.1"]);
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(stderr(&output), "paddock: mysql: not implemented yet\n");
+    assert_eq!(stderr(&output), "paddock: typesense: not implemented yet\n");
 }
 
 // These are rejected before Paddock touches the system, so they're safe on the host.
@@ -91,5 +91,35 @@ fn php_rejects_invalid_extension_names() {
     assert_eq!(
         stderr(&output),
         "paddock: php: invalid extension name 'bad!'\n"
+    );
+}
+
+#[test]
+fn mysql_rejects_unknown_versions_listing_supported_ones() {
+    let output = paddock(&["setup", "mysql", "5.7"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: mysql: unsupported version '5.7' (supported: 8.0 8.4 9.7 innovation)\n"
+    );
+}
+
+#[test]
+fn mysql_username_needs_password() {
+    let output = paddock(&["setup", "mysql", "8.4", "--username", "app"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: mysql: --username needs --password\n"
+    );
+}
+
+#[test]
+fn mysql_rejects_unsafe_database_names() {
+    let output = paddock(&["setup", "mysql", "8.4", "--database", "app`; drop"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: mysql: database name may only use letters, digits and _ (got 'app`; drop')\n"
     );
 }
