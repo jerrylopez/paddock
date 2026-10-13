@@ -31,7 +31,7 @@ macro_rules! service {
 }
 
 pub const SERVICES: &[Service] = &[
-    service!("php", "PHP CLI and FPM"),
+    service!("php", "PHP CLI with extensions"),
     service!("mysql", "MySQL server"),
     service!("typesense", "Typesense search server"),
 ];

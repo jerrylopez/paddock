@@ -167,22 +167,46 @@ _paddock_require_root() {
   [ "$(id -u)" -eq 0 ] || has_command sudo || die "needs root: run as root or install sudo"
 }
 
+# package_installed PACKAGE: succeed if the Debian package is installed.
+package_installed() {
+  local status
+  status=$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null) || return 1
+  [ "$status" = "install ok installed" ]
+}
+
+# apt_update: refresh package lists, at most once per setup unless `apt_source`
+# changes a source. Call it before `apt-cache` lookups; `apt_install` calls it
+# itself when something needs installing.
+apt_update() {
+  [ -z "$_paddock_apt_updated" ] || return 0
+  # Checked here so the error isn't buried in `quietly`'s captured output.
+  _paddock_require_root
+  quietly as_root apt-get update
+  _paddock_apt_updated=1
+}
+
+# apt_source NAME LINE: make /etc/apt/sources.list.d/NAME.list contain LINE.
+# If that changes the file, the next `apt_update` runs again.
+apt_source() {
+  local file=/etc/apt/sources.list.d/$1.list
+  if [ -f "$file" ] && [ "$(cat "$file")" = "$2" ]; then
+    return 0
+  fi
+  _paddock_require_root
+  printf '%s\n' "$2" | as_root tee "$file" >/dev/null
+  _paddock_apt_updated=
+}
+
 # apt_install PACKAGE...: install the packages that aren't installed yet.
-# Runs `apt-get update` at most once per setup, and only if something is missing.
+# Refreshes package lists first (see `apt_update`), only if something is missing.
 apt_install() {
-  local package status missing=()
+  local package missing=()
   for package in "$@"; do
-    status=$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) || true
-    [ "$status" = "install ok installed" ] || missing+=("$package")
+    package_installed "$package" || missing+=("$package")
   done
   [ ${#missing[@]} -eq 0 ] && return 0
 
-  # Checked here so the error isn't buried in `quietly`'s captured output.
-  _paddock_require_root
-  if [ -z "$_paddock_apt_updated" ]; then
-    quietly as_root apt-get update
-    _paddock_apt_updated=1
-  fi
+  apt_update
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends "${missing[@]}"
 }

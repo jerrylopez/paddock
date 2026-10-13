@@ -30,8 +30,9 @@ finish quickly.
 - Check before you act. Install only what's missing (`apt_install` does this), and write a file
   only if it's absent or different.
 - Never fail because something already exists: a user, a database, a repository entry.
-- Container tests for a service should use `harness::setup_twice_then_verify`, which runs
-  setup twice in one container before checking the result.
+- Container tests for a service should use `harness::setup_twice_then_verify`. It runs setup
+  twice in one container, with `apt` and `apt-get` made to fail during the second run: a
+  rerun on an already set-up machine shouldn't need them.
 
 ### 2. Output is short
 
@@ -83,11 +84,19 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `usage_error MSG` | Reports a bad version or flag and exits 2 |
 | `quietly CMD...` | Runs CMD silently; on failure prints its output and exits with its status |
 | `as_root CMD...` | Runs CMD as root, through `sudo` when needed |
-| `apt_install PKG...` | Installs missing Debian packages; runs `apt-get update` at most once, only if needed |
+| `apt_install PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing |
+| `apt_update` | Refreshes package lists, at most once per setup unless `apt_source` changed a source |
+| `apt_source NAME LINE` | Makes `/etc/apt/sources.list.d/NAME.list` contain LINE; if that changes it, lists are refreshed again |
+| `package_installed PKG` | Succeeds if the Debian package is installed |
 | `has_command NAME` | Succeeds if NAME is on the PATH |
 
-`quietly` and `die` exit the whole script, so don't call them inside `$(...)`, where they would
-only exit the subshell.
+Pitfalls:
+
+- `quietly` and `die` exit the whole script, so don't call them inside `$(...)`, where they
+  would only exit the subshell.
+- Don't set an `EXIT` trap; `common.sh` uses it to report failures.
+- Don't source `/etc/os-release` directly: it defines its own `VERSION`. Read it in a subshell,
+  e.g. `codename=$(. /etc/os-release && echo "$VERSION_CODENAME")`.
 
 ## Template
 

@@ -2,6 +2,30 @@
 
 Native environment setup for Amp orbs.
 
+## Services
+
+### PHP
+
+```sh
+paddock setup php 8.3
+paddock setup php 8.4 --extensions redis,pdo_mysql
+```
+
+Installs the PHP CLI on Debian from [packages.sury.org](https://packages.sury.org/php/), Ondřej
+Surý's repository (the Debian counterpart of his Ubuntu PPA), and
+[Composer](https://getcomposer.org) as `/usr/local/bin/composer`.
+
+- The version is major.minor (5.6 to 8.6 today); the repository provides the latest patch.
+- Default extensions: amqp, bcmath, curl, gd, gmp, imagick, intl, json, mbstring, msgpack,
+  mysqlnd, opcache, pcntl, pdo, posix, redis, shmop, soap, sodium, sysvmsg, sysvsem, sysvshm,
+  xml, xmlrpc, zip. Defaults not yet packaged for a version (e.g. redis on 8.6) are skipped with
+  a warning.
+- `--extensions` adds to the defaults, using the names `php -m` shows. Extensions you ask for
+  this way must be available.
+- Composer is the latest 2.x release, or the 2.2 LTS line for PHP older than 7.2.5. Its download
+  is checked against the SHA-256 checksum getcomposer.org publishes.
+- With several versions installed, `php` runs the one set up most recently.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

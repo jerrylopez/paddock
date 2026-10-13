@@ -67,7 +67,29 @@ fn missing_version_is_rejected() {
 
 #[test]
 fn setup_runs_the_embedded_service_script() {
-    let output = paddock(&["setup", "php", "8.3"]);
+    let output = paddock(&["setup", "mysql", "8.4"]);
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(stderr(&output), "paddock: php: not implemented yet\n");
+    assert_eq!(stderr(&output), "paddock: mysql: not implemented yet\n");
+}
+
+// These are rejected before Paddock touches the system, so they're safe on the host.
+
+#[test]
+fn php_rejects_patch_versions() {
+    let output = paddock(&["setup", "php", "8.3.1"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: php: version must be major.minor, e.g. 8.3 (got '8.3.1')\n"
+    );
+}
+
+#[test]
+fn php_rejects_invalid_extension_names() {
+    let output = paddock(&["setup", "php", "8.3", "--extensions", "intl,bad!"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: php: invalid extension name 'bad!'\n"
+    );
 }
