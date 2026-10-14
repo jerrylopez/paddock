@@ -17,7 +17,6 @@
 
 MYSQL_KEY_URL=https://repo.mysql.com/RPM-GPG-KEY-mysql-2025
 MYSQL_KEY_FINGERPRINT=BCA43417C3B485DD128EC6D4B7B3B788A8D3785C
-MYSQL_KEYRING=/etc/apt/keyrings/mysql.asc
 MYSQL_SOURCE=/etc/apt/sources.list.d/mysql.list
 MYSQL_SOCKET=/var/run/mysqld/mysqld.sock
 
@@ -53,28 +52,15 @@ case $arch in
 esac
 
 add_mysql_repository() {
-  if [ ! -f "$MYSQL_KEYRING" ]; then
-    apt_install ca-certificates curl gnupg
-    local dir fingerprint
-    dir=$(mktemp -d)
-    quietly curl -fsSL -o "$dir/key.asc" "$MYSQL_KEY_URL"
-    fingerprint=$(GNUPGHOME=$dir gpg --show-keys --with-colons "$dir/key.asc" 2>/dev/null |
-      awk -F: '$1 == "fpr" { print $10; exit }')
-    if [ "$fingerprint" != "$MYSQL_KEY_FINGERPRINT" ]; then
-      rm -rf "$dir"
-      die "the MySQL signing key from $MYSQL_KEY_URL has fingerprint '$fingerprint', expected $MYSQL_KEY_FINGERPRINT"
-    fi
-    quietly as_root install -D -m 0644 "$dir/key.asc" "$MYSQL_KEYRING"
-    rm -rf "$dir"
-  fi
-
-  local line="deb [signed-by=$MYSQL_KEYRING] https://repo.mysql.com/apt/debian $codename $suite"
+  apt_keyring mysql "$MYSQL_KEY_URL" "$MYSQL_KEY_FINGERPRINT"
   # MySQL can't move an existing data directory to another series (e.g. 8.4 -> 8.0).
-  if package_installed mysql-community-server && [ -f "$MYSQL_SOURCE" ] &&
-    [ "$(cat "$MYSQL_SOURCE")" != "$line" ]; then
-    die "MySQL from $(awk '{ print $NF }' "$MYSQL_SOURCE") is already installed; switching to $VERSION isn't supported (remove mysql-community-server and /var/lib/mysql first)"
+  if package_installed mysql-community-server && [ -f "$MYSQL_SOURCE" ]; then
+    local installed
+    installed=$(awk '{ print $NF }' "$MYSQL_SOURCE")
+    [ "$installed" = "$suite" ] ||
+      die "MySQL from $installed is already installed; switching to $VERSION isn't supported (remove mysql-community-server and /var/lib/mysql first)"
   fi
-  apt_source mysql "$line"
+  apt_source mysql "deb [signed-by=/etc/apt/keyrings/mysql.gpg] https://repo.mysql.com/apt/debian $codename $suite"
 }
 
 # `ping` succeeds whenever the server is up, even if login would be refused.

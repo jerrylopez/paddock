@@ -191,6 +191,44 @@ apt_update() {
   _paddock_apt_updated=1
 }
 
+# apt_keyring NAME URL FINGERPRINT...: install the signing keys published at
+# URL as /etc/apt/keyrings/NAME.gpg, for `signed-by=` in an `apt_source` line.
+# Refuses them unless every key's fingerprint is one of those listed. Does
+# nothing if the keyring already exists.
+apt_keyring() {
+  local name=$1 url=$2
+  shift 2
+  local keyring=/etc/apt/keyrings/$name.gpg
+  [ ! -f "$keyring" ] || return 0
+
+  apt_install ca-certificates curl gnupg
+  local dir fingerprint expected found=()
+  dir=$(mktemp -d)
+  quietly curl -fsSL -o "$dir/key" "$url"
+  quietly env GNUPGHOME="$dir" gpg --batch --import "$dir/key"
+  mapfile -t found < <(GNUPGHOME=$dir gpg --batch --with-colons --list-keys 2>/dev/null |
+    awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }')
+  for fingerprint in "${found[@]}"; do
+    for expected in "$@"; do
+      [ "$fingerprint" = "$expected" ] && continue 2
+    done
+    _paddock_drop_gnupg "$dir"
+    die "the signing key $fingerprint from $url isn't one of the expected keys ($*)"
+  done
+  if [ ${#found[@]} -eq 0 ]; then
+    _paddock_drop_gnupg "$dir"
+    die "no signing key found at $url"
+  fi
+  GNUPGHOME=$dir gpg --batch --export >"$dir/keyring.gpg"
+  quietly as_root install -D -m 0644 "$dir/keyring.gpg" "$keyring"
+  _paddock_drop_gnupg "$dir"
+}
+
+_paddock_drop_gnupg() {
+  GNUPGHOME=$1 gpgconf --kill all >/dev/null 2>&1 || true
+  rm -rf "$1"
+}
+
 # apt_source NAME LINE: make /etc/apt/sources.list.d/NAME.list contain LINE.
 # If that changes the file, the next `apt_update` runs again.
 apt_source() {

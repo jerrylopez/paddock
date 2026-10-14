@@ -39,6 +39,7 @@ pub const SERVICES: &[Service] = &[
     service!("php", "PHP CLI with extensions"),
     service!("php-fpm", "PHP-FPM and the PHP CLI", script = "php"),
     service!("mysql", "MySQL server"),
+    service!("nginx", "nginx web server (stable or mainline)"),
     service!("typesense", "Typesense search server"),
 ];
 

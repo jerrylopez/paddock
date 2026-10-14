@@ -75,3 +75,27 @@ paste -sd ' ' /tmp/apt-calls
         "\n{outcome}"
     );
 }
+
+#[test]
+fn apt_keyring_checks_fingerprints() {
+    let outcome = harness::run_service_script(
+        r#"
+url=https://nginx.org/keys/nginx_signing.key
+if (apt_keyring wrong "$url" 0000000000000000000000000000000000000000) 2>/tmp/err; then
+  echo "wrong fingerprint accepted"
+fi
+[ -f /etc/apt/keyrings/wrong.gpg ] && echo "wrong keyring installed"
+grep -o "isn't one of the expected keys" /tmp/err
+apt_keyring nginx "$url" 573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62 \
+  8540A6F18833A80E9C1653A42FD21310B49F6B46 9E9BE90EACBCDE69FE9B204CBCDCD8A38D88A2B3
+gpg --show-keys --with-colons /etc/apt/keyrings/nginx.gpg 2>/dev/null | grep -c '^pub'
+"#,
+        &["1.0"],
+        &[],
+    );
+    outcome.assert_success();
+    assert_eq!(
+        outcome.stdout, "isn't one of the expected keys\n3\n",
+        "\n{outcome}"
+    );
+}
