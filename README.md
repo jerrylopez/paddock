@@ -72,6 +72,23 @@ release in it, and running setup with the other channel switches to it. nginx.or
 take priority over Debian's own nginx. The default site answers on port 80. Under systemd,
 nginx is enabled and started. Wiring nginx to PHP-FPM is left to presets.
 
+### OpenSearch
+
+```sh
+paddock setup opensearch 3
+paddock setup opensearch 2 --heap 1g
+```
+
+Installs OpenSearch from [its APT repository](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/debian/).
+The version is the major (`2` or `3`); the repository provides the latest release in it.
+
+- Configured for local development: one node on `127.0.0.1:9200`, security plugin disabled (no
+  TLS or passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
+  `/etc/opensearch/opensearch.yml` and restarts OpenSearch when it changes.
+- Under systemd, OpenSearch is enabled and started, and setup waits until the cluster is usable.
+- Switching an install to another major isn't supported, and it refuses to install next to
+  Elasticsearch, which uses the same port.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

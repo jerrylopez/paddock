@@ -133,3 +133,13 @@ fn nginx_rejects_version_numbers() {
         "paddock: nginx: unsupported version '1.30' (supported: stable mainline)\n"
     );
 }
+
+#[test]
+fn opensearch_rejects_bad_heap_sizes() {
+    let output = paddock(&["setup", "opensearch", "3", "--heap", "lots"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: opensearch: --heap must be a size like 512m or 2g (got 'lots')\n"
+    );
+}

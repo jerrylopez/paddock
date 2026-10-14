@@ -10,5 +10,6 @@ mod harness;
 mod basics;
 mod mysql;
 mod nginx;
+mod opensearch;
 mod php;
 mod php_fpm;

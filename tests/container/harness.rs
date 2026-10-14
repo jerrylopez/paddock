@@ -88,13 +88,14 @@ pub struct SystemdContainer {
 impl SystemdContainer {
     /// Starts a container and waits for systemd to finish booting.
     pub fn start() -> Self {
-        // systemd needs the host's cgroup tree and a writable /run.
+        // systemd needs privileges and a writable /run. A private cgroup
+        // namespace makes /sys/fs/cgroup look as it does on a real machine;
+        // software that reads its own cgroup limits (OpenSearch) relies on it.
         let output = docker(&[
             "run",
             "--detach",
             "--privileged",
-            "--cgroupns=host",
-            "--volume=/sys/fs/cgroup:/sys/fs/cgroup:rw",
+            "--cgroupns=private",
             "--tmpfs=/run",
             "--tmpfs=/run/lock",
             image("systemd"),
