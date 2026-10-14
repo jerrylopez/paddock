@@ -1,9 +1,9 @@
 # opensearch.sh: installs OpenSearch from its official APT repository.
-# Usage (via Paddock): paddock setup opensearch <version> [--heap SIZE]
+# Usage (via Paddock): paddock setup opensearch <major.minor> [--heap SIZE]
 #
-# <version> is an exact OpenSearch 2 or 3 release such as 3.9.0; the
-# repository keeps past releases and an APT pin installs exactly that one.
-# Upgrading within a major is supported; going back or to another major isn't.
+# <major.minor> is an OpenSearch 2.x or 3.x release series such as 3.9;
+# an APT pin installs the latest patch in it. Moving to a newer series within
+# a major upgrades; going back or to another major isn't supported.
 # Configured for local development: one node on 127.0.0.1:9200 with the
 # security plugin disabled (no TLS, no passwords), and a small JVM heap
 # (--heap, default 512m). Under systemd, OpenSearch is enabled and started.
@@ -15,8 +15,8 @@ OPENSEARCH_URL=http://127.0.0.1:9200
 option heap 512m
 parse_args "$@"
 
-[[ $VERSION =~ ^([0-9]+)\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be an OpenSearch release like 3.9.0 (got '$VERSION')"
+[[ $VERSION =~ ^([0-9]+)\.[0-9]+$ ]] ||
+  usage_error "version must be an OpenSearch series like 3.9 (got '$VERSION')"
 major=${BASH_REMATCH[1]}
 
 # Each major's repository is signed by a different key.
@@ -29,7 +29,7 @@ case $major in
     key_url=https://artifacts.opensearch.org/publickeys/opensearch-release.pgp
     key_fingerprint=A8B2D9E04CD51FEF6AA2DB53BA81D99981191457
     ;;
-  *) usage_error "OpenSearch $VERSION isn't supported; use a 2.x or 3.x release" ;;
+  *) usage_error "OpenSearch $VERSION isn't supported; use a 2.x or 3.x series" ;;
 esac
 [[ $heap =~ ^[0-9]+[mg]$ ]] || usage_error "--heap must be a size like 512m or 2g (got '$heap')"
 
@@ -45,7 +45,7 @@ esac
 ! package_installed elasticsearch ||
   die "Elasticsearch is installed and uses the same port; remove it before setting up OpenSearch"
 
-installed=$(installed_version opensearch)
+installed=$(installed_series opensearch)
 if [ -n "$installed" ] && [ "${installed%%.*}" != "$major" ]; then
   die "OpenSearch $installed is installed; switching to another major version isn't supported (remove the opensearch package and /var/lib/opensearch first)"
 fi
@@ -56,12 +56,12 @@ fi
 
 apt_keyring "opensearch-$major" "$key_url" "$key_fingerprint"
 apt_source opensearch "deb [signed-by=/etc/apt/keyrings/opensearch-$major.gpg] https://artifacts.opensearch.org/releases/bundle/opensearch/$major.x/apt stable main"
-apt_pin opensearch "$VERSION" opensearch
+apt_pin opensearch "$VERSION.*" opensearch
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_published opensearch OpenSearch
+  require_series opensearch OpenSearch
   if [ -n "$installed" ]; then
     info "Upgrading OpenSearch $installed to $VERSION"
     upgraded=1
@@ -110,8 +110,8 @@ if has_systemd; then
     quietly as_root systemctl restart opensearch
   fi
   wait_until_ready
-  info "OpenSearch $VERSION is running on http://localhost:9200 (heap $heap, security disabled)"
+  info "OpenSearch $(installed_version opensearch) is running on http://localhost:9200 (heap $heap, security disabled)"
 else
-  info "OpenSearch $VERSION is installed (heap $heap, security disabled)"
+  info "OpenSearch $(installed_version opensearch) is installed (heap $heap, security disabled)"
   warn "systemd isn't running, so OpenSearch won't start on its own"
 fi

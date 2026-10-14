@@ -1,11 +1,10 @@
 # varnish.sh: installs Varnish Cache from its official packagecloud repositories.
-# Usage (via Paddock): paddock setup varnish <version> [flags...]
+# Usage (via Paddock): paddock setup varnish <major.minor> [flags...]
 #
-# <version> is an exact release in a supported series: 6.0 (LTS), 7.6, 7.7 or
-# 8.0, e.g. 8.0.2. Each series has its own repository, which keeps past
-# releases; an APT pin installs exactly the one asked for. Running setup with
-# another release switches to it (Varnish only holds a cache, so going back is
-# fine too).
+# <major.minor> is a supported release series: 6.0 (LTS), 7.6, 7.7 or 8.0.
+# Each has its own repository; an APT pin installs the latest patch in it.
+# Running setup with another series switches to it (Varnish only holds a
+# cache, so going back is fine too).
 #
 #   --backend HOST:PORT   the server Varnish caches (default 127.0.0.1:8080)
 #   --port PORT           where Varnish listens on 127.0.0.1 (default 6081)
@@ -22,16 +21,13 @@ option port 6081
 option memory 256m
 parse_args "$@"
 
-[[ $VERSION =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]] ||
-  usage_error "version must be a Varnish release like 8.0.2 (got '$VERSION')"
-series=${BASH_REMATCH[1]}
 # Each series has its own repository and signing key.
-case $series in
+case $VERSION in
   6.0) repo=varnish60lts key=48D81A24CB0456F5D59431D94CFCFD6BA750EDCD ;;
   7.6) repo=varnish76 key=6B803A8DF5983DDEB704FF7435BA265D95368ADC ;;
   7.7) repo=varnish77 key=7B9C4CC47FCF4E7D1B39889094C63CC2D7584016 ;;
   8.0) repo=varnish80 key=42E4EDD233A3463A90671EEAFC3FECD870B8A552 ;;
-  *) usage_error "Varnish $VERSION isn't in a supported series (6.0, 7.6, 7.7, 8.0)" ;;
+  *) require_version 6.0 7.6 7.7 8.0 ;;
 esac
 [[ $backend =~ ^([A-Za-z0-9.-]+):([0-9]+)$ ]] ||
   usage_error "--backend must be HOST:PORT (got '$backend')"
@@ -50,14 +46,14 @@ esac
 
 apt_keyring "varnish-$repo" "https://packagecloud.io/varnishcache/$repo/gpgkey" "$key"
 apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ $codename main"
-# Exactly this release, over Debian's own Varnish (7.1) and over newer ones.
-apt_pin varnish "$VERSION-*" varnish
+# The latest release in this series, over Debian's own Varnish (7.1).
+apt_pin varnish "$VERSION.*" varnish
 
-installed=$(installed_version varnish)
+installed=$(installed_series varnish)
 switching=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_published varnish Varnish
+  require_series varnish Varnish
   if [ -n "$installed" ]; then
     info "Switching Varnish $installed to $VERSION"
     switching=1
@@ -102,8 +98,8 @@ ExecStart=$start"
     [ "$tries" -lt 30 ] || die "Varnish didn't start; see journalctl -u varnish"
     sleep 1
   done
-  info "Varnish $VERSION is running on 127.0.0.1:$port, caching $backend"
+  info "Varnish $(installed_version varnish) is running on 127.0.0.1:$port, caching $backend"
 else
-  info "Varnish $VERSION is installed, caching $backend"
+  info "Varnish $(installed_version varnish) is installed, caching $backend"
   warn "systemd isn't running, so Varnish won't start on its own; start it with: sudo ${start/ -F / }"
 fi

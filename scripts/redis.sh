@@ -1,9 +1,9 @@
 # redis.sh: installs Redis from its official APT repository (packages.redis.io).
-# Usage (via Paddock): paddock setup redis <version> [--password PASSWORD]
+# Usage (via Paddock): paddock setup redis <major.minor> [--password PASSWORD]
 #
-# <version> is an exact Redis release such as 8.2.3; the repository keeps past
-# releases and an APT pin installs exactly that one. Upgrading is supported;
-# going back to an older release isn't.
+# <major.minor> is a Redis release series such as 8.2; an APT pin installs the
+# latest patch in it. Moving to a newer series upgrades; going back to an
+# older one isn't supported.
 #
 # Redis listens on 127.0.0.1:6379 (the package default). --password sets
 # `requirepass` in /etc/redis/paddock.conf, which includes the package's own
@@ -17,8 +17,8 @@ REDIS_DROPIN=/etc/systemd/system/redis-server.service.d/paddock.conf
 option password ""
 parse_args "$@"
 
-[[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be a Redis release like 8.2.3 (got '$VERSION')"
+[[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]] ||
+  usage_error "version must be a Redis series like 8.2 (got '$VERSION')"
 [[ $password != *[[:space:]\"\']* ]] ||
   usage_error "--password can't contain spaces or quotes"
 
@@ -35,7 +35,7 @@ if [ -e /opt/valkey/current ] || package_installed valkey-server; then
   die "Valkey is installed and uses the same port; remove it before setting up Redis"
 fi
 
-installed=$(installed_version redis-server)
+installed=$(installed_series redis-server)
 if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
   dpkg --compare-versions "$VERSION" lt "$installed"; then
   die "Redis $installed is installed; going back to $VERSION isn't supported (its data may not be readable by older versions)"
@@ -43,12 +43,12 @@ fi
 
 apt_keyring redis "$REDIS_KEY_URL" "$REDIS_KEY_FINGERPRINT"
 apt_source redis "deb [signed-by=/etc/apt/keyrings/redis.gpg] https://packages.redis.io/deb $codename main"
-apt_pin redis "6:$VERSION-*" redis redis-server redis-tools
+apt_pin redis "6:$VERSION.*" redis redis-server redis-tools
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_published redis-server Redis
+  require_series redis-server Redis
   if [ -n "$installed" ]; then
     info "Upgrading Redis $installed to $VERSION"
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
@@ -98,8 +98,8 @@ ExecStart=/usr/bin/redis-server $REDIS_CONFIG"
     [ "$tries" -lt 30 ] || die "Redis didn't start; see journalctl -u redis-server"
     sleep 1
   done
-  info "Redis $VERSION is running on 127.0.0.1:6379"
+  info "Redis $(installed_version redis-server) is running on 127.0.0.1:6379"
 else
-  info "Redis $VERSION is installed"
+  info "Redis $(installed_version redis-server) is installed"
   warn "systemd isn't running, so Redis won't start on its own; start it with: sudo -u redis redis-server $REDIS_CONFIG"
 fi

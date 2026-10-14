@@ -12,7 +12,7 @@ fn creates_user_and_vhost_under_systemd_and_survives_a_restart() {
     let container = harness::SystemdContainer::start();
     let outcome = container.setup_twice_then_verify(
         "rabbitmq",
-        "4.2.8",
+        "4.2",
         &[
             "--username",
             "app",
@@ -25,13 +25,13 @@ fn creates_user_and_vhost_under_systemd_and_survives_a_restart() {
     );
     assert_eq!(
         outcome.section("setup (first run)").lines().next(),
-        Some("paddock: rabbitmq: Installing RabbitMQ 4.2.8"),
+        Some("paddock: rabbitmq: Installing RabbitMQ 4.2"),
         "\n{outcome}"
     );
     let rerun: Vec<_> = outcome.section("setup (second run)").lines().collect();
     assert_eq!(rerun.len(), 1, "rerun should print one line\n{outcome}");
     assert!(
-        rerun[0].starts_with("paddock: rabbitmq: RabbitMQ 4.2.8 ")
+        rerun[0].starts_with("paddock: rabbitmq: RabbitMQ 4.2.")
             && rerun[0].ends_with(
                 " is running on 127.0.0.1:5672 (management UI on http://localhost:15672, user: app, vhost: app)"
             ),
@@ -57,19 +57,19 @@ fn creates_user_and_vhost_under_systemd_and_survives_a_restart() {
 #[test]
 fn upgrades_series_and_refuses_to_go_back() {
     let outcome = harness::run(
-        "paddock setup rabbitmq 4.1.7 --username app --password secret\n\
-         paddock setup rabbitmq 4.2.8\n\
-         dpkg-query -W -f='${Version}\\n' rabbitmq-server | cut -d- -f1\n\
-         paddock setup rabbitmq 4.1.7 || echo \"exit=$?\"\n\
-         paddock setup rabbitmq 4.2.99 || echo \"exit=$?\"",
+        "paddock setup rabbitmq 4.1 --username app --password secret\n\
+         paddock setup rabbitmq 4.2\n\
+         dpkg-query -W -f='${Version}\\n' rabbitmq-server | cut -d. -f1-2\n\
+         paddock setup rabbitmq 4.1 || echo \"exit=$?\"\n\
+         paddock setup rabbitmq 4.99 || echo \"exit=$?\"",
     );
     outcome.assert_success();
     let lines: Vec<_> = outcome.stdout.lines().collect();
     assert!(
-        lines.contains(&"paddock: rabbitmq: Upgrading RabbitMQ 4.1.7 to 4.2.8"),
+        lines.contains(&"paddock: rabbitmq: Upgrading RabbitMQ 4.1 to 4.2"),
         "\n{outcome}"
     );
-    assert!(lines.contains(&"4.2.8"), "\n{outcome}");
+    assert!(lines.contains(&"4.2"), "\n{outcome}");
     assert_eq!(
         lines[lines.len() - 2..],
         ["exit=1", "exit=2"],
@@ -77,14 +77,14 @@ fn upgrades_series_and_refuses_to_go_back() {
     );
     assert!(
         outcome.stderr.contains(
-            "paddock: rabbitmq: RabbitMQ 4.2.8 is installed; going back to 4.1.7 isn't supported"
+            "paddock: rabbitmq: RabbitMQ 4.2 is installed; going back to 4.1 isn't supported"
         ),
         "\n{outcome}"
     );
     assert!(
         outcome
             .stderr
-            .contains("paddock: rabbitmq: RabbitMQ 4.2.99 isn't published (available: 4.2."),
+            .contains("paddock: rabbitmq: RabbitMQ 4.99 isn't available (available: "),
         "\n{outcome}"
     );
 }

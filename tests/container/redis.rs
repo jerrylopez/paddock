@@ -5,29 +5,30 @@ use crate::harness;
 #[test]
 fn runs_under_systemd_with_a_password_and_keeps_data_across_a_restart() {
     let container = harness::SystemdContainer::start();
-    // Not the newest 8.10 release, so the pin has to pick it.
     let outcome = container.setup_twice_then_verify(
         "redis",
-        "8.10.1",
+        "8.10",
         &["--password", "secret"],
         "systemctl is-active redis-server\n\
          redis-cli ping 2>&1 | grep -o NOAUTH\n\
          REDISCLI_AUTH=secret redis-cli set greeting hello\n\
-         REDISCLI_AUTH=secret redis-cli info server | grep -o 'redis_version:[0-9.]*'",
+         REDISCLI_AUTH=secret redis-cli info server | grep -o 'redis_version:8\\.10\\.'",
     );
     assert_eq!(
-        outcome.section("setup (first run)"),
-        "paddock: redis: Installing Redis 8.10.1\npaddock: redis: Redis 8.10.1 is running on 127.0.0.1:6379\n",
+        outcome.section("setup (first run)").lines().next(),
+        Some("paddock: redis: Installing Redis 8.10"),
         "\n{outcome}"
     );
-    assert_eq!(
-        outcome.section("setup (second run)"),
-        "paddock: redis: Redis 8.10.1 is running on 127.0.0.1:6379\n",
+    let rerun: Vec<_> = outcome.section("setup (second run)").lines().collect();
+    assert_eq!(rerun.len(), 1, "rerun should print one line\n{outcome}");
+    assert!(
+        rerun[0].starts_with("paddock: redis: Redis 8.10.")
+            && rerun[0].ends_with(" is running on 127.0.0.1:6379"),
         "\n{outcome}"
     );
     assert_eq!(
         outcome.section("verify"),
-        "active\nNOAUTH\nOK\nredis_version:8.10.1\n",
+        "active\nNOAUTH\nOK\nredis_version:8.10.\n",
         "\n{outcome}"
     );
 
@@ -41,40 +42,44 @@ fn runs_under_systemd_with_a_password_and_keeps_data_across_a_restart() {
 }
 
 #[test]
-fn upgrades_and_refuses_to_go_back() {
+fn upgrades_series_and_refuses_to_go_back() {
     let outcome = harness::run(
-        "paddock setup redis 7.4.10\n\
-         paddock setup redis 8.2.9\n\
-         redis-server --version | grep -o 'v=[0-9.]*'\n\
-         paddock setup redis 7.4.10 || echo \"exit=$?\"\n\
-         paddock setup redis 8.2.99 || echo \"exit=$?\"\n\
-         paddock setup redis 8.2 || echo \"exit=$?\"",
+        "paddock setup redis 7.4\n\
+         paddock setup redis 8.2\n\
+         redis-server --version | grep -o 'v=8\\.2\\.'\n\
+         paddock setup redis 7.4 || echo \"exit=$?\"\n\
+         paddock setup redis 9.9 || echo \"exit=$?\"",
     );
     outcome.assert_success();
     let lines: Vec<_> = outcome.stdout.lines().collect();
     assert!(
-        lines.contains(&"paddock: redis: Upgrading Redis 7.4.10 to 8.2.9"),
+        lines.contains(&"paddock: redis: Upgrading Redis 7.4 to 8.2"),
         "\n{outcome}"
     );
-    assert!(lines.contains(&"v=8.2.9"), "\n{outcome}");
+    assert!(lines.contains(&"v=8.2."), "\n{outcome}");
     assert_eq!(
-        lines[lines.len() - 3..],
-        ["exit=1", "exit=2", "exit=2"],
+        lines[lines.len() - 2..],
+        ["exit=1", "exit=2"],
         "\n{outcome}"
     );
-    for expected in [
-        "paddock: redis: Redis 8.2.9 is installed; going back to 7.4.10 isn't supported",
-        "paddock: redis: Redis 8.2.99 isn't published (available: 8.2.",
-        "paddock: redis: version must be a Redis release like 8.2.3 (got '8.2')",
-    ] {
-        assert!(outcome.stderr.contains(expected), "{expected}\n{outcome}");
-    }
+    assert!(
+        outcome
+            .stderr
+            .contains("paddock: redis: Redis 8.2 is installed; going back to 7.4 isn't supported"),
+        "\n{outcome}"
+    );
+    assert!(
+        outcome.stderr.contains(
+            "paddock: redis: Redis 9.9 isn't available (available: 6.0 6.2 7.0 7.2 7.4 8.0 8.2"
+        ),
+        "\n{outcome}"
+    );
 }
 
 #[test]
 fn refuses_to_install_next_to_valkey() {
     let outcome = harness::run(
-        "paddock setup valkey 9.1.2 >/dev/null\npaddock setup redis 8.2.9 || echo \"exit=$?\"",
+        "paddock setup valkey 9.1 >/dev/null\npaddock setup redis 8.2 || echo \"exit=$?\"",
     );
     assert!(outcome.stdout.ends_with("exit=1\n"), "\n{outcome}");
     assert!(

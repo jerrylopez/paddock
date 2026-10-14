@@ -1,10 +1,11 @@
 # valkey.sh: installs Valkey from its official release binaries (download.valkey.io).
-# Usage (via Paddock): paddock setup valkey <version> [--password PASSWORD]
+# Usage (via Paddock): paddock setup valkey <major.minor> [--password PASSWORD]
 #
-# <version> is a Valkey release such as 9.1.2. Valkey publishes no Debian
-# repository (bookworm-backports only has 8.0.1), so Paddock installs the
-# official build for Ubuntu 22.04, which runs on Debian 12, checked against its
-# published SHA-256. Upgrading is supported; going back to an older version isn't.
+# <major.minor> is a Valkey release series such as 9.1; the latest patch in it
+# is installed. Valkey publishes no Debian repository (bookworm-backports only
+# has 8.0.1), so Paddock installs the official build for Ubuntu 22.04, which
+# runs on Debian 12, checked against its published SHA-256. Moving to a newer
+# series upgrades; going back to an older one isn't supported.
 #
 # Valkey listens on 127.0.0.1:6379; --password sets `requirepass`. Under
 # systemd it runs as the `valkey-server` unit.
@@ -17,8 +18,8 @@ VALKEY_TOOLS=(valkey-server valkey-cli valkey-benchmark valkey-check-aof valkey-
 option password ""
 parse_args "$@"
 
-[[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be a Valkey release like 9.1.2 (got '$VERSION')"
+[[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]] ||
+  usage_error "version must be a Valkey series like 9.1 (got '$VERSION')"
 [[ $password != *[[:space:]\"\']* ]] ||
   usage_error "--password can't contain spaces or quotes"
 
@@ -36,24 +37,46 @@ for package in redis redis-server; do
     die "Redis is installed and uses the same port; remove it before setting up Valkey"
 done
 
+# The installed release, e.g. 9.1.2, and its series.
 installed=$(readlink "$VALKEY_HOME/current" 2>/dev/null) || installed=
 installed=${installed##*/}
-if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
-  dpkg --compare-versions "$VERSION" lt "$installed"; then
+installed_series=$(cut -d. -f1-2 <<<"$installed")
+if [ -n "$installed" ] && [ "$installed_series" != "$VERSION" ] &&
+  dpkg --compare-versions "$VERSION" lt "$installed_series"; then
   die "Valkey $installed is installed; going back to $VERSION isn't supported (its data may not be readable by older versions)"
 fi
 
+release_url() {
+  echo "https://download.valkey.io/releases/valkey-$1-jammy-$arch.tar.gz"
+}
+
+published() {
+  curl -fsSI --retry 3 --retry-connrefused "$(release_url "$1")" >/dev/null 2>&1
+}
+
 new_binary=
-if [ ! -x "$VALKEY_HOME/$VERSION/bin/valkey-server" ]; then
+if [ "$installed_series" = "$VERSION" ]; then
+  release=$installed
+else
   apt_install ca-certificates curl
-  url=https://download.valkey.io/releases/valkey-$VERSION-jammy-$arch.tar.gz
-  curl -fsSI --retry 3 --retry-connrefused "$url" >/dev/null 2>&1 ||
-    usage_error "Valkey $VERSION isn't published (no $url); see https://valkey.io/download/ for releases"
+  # Valkey publishes no index, so find the series' latest patch by trying
+  # each one in turn: 9.1.0, 9.1.1, ... until one is missing.
+  release=
+  for patch in $(seq 0 99); do
+    if published "$VERSION.$patch"; then
+      release=$VERSION.$patch
+    elif [ -n "$release" ] || [ "$patch" -ge 1 ]; then
+      break
+    fi
+  done
+  [ -n "$release" ] ||
+    usage_error "Valkey $VERSION isn't published; see https://valkey.io/download/ for releases"
   if [ -n "$installed" ]; then
-    info "Upgrading Valkey $installed to $VERSION"
+    info "Upgrading Valkey $installed to $release"
   else
-    info "Installing Valkey $VERSION"
+    info "Installing Valkey $release"
   fi
+  url=$(release_url "$release")
   dir=$(mktemp -d)
   download "$url" "$dir/valkey.tar.gz"
   download "$url.sha256" "$dir/valkey.tar.gz.sha256"
@@ -64,15 +87,11 @@ if [ ! -x "$VALKEY_HOME/$VERSION/bin/valkey-server" ]; then
     die "the Valkey download from $url doesn't match its checksum"
   fi
   quietly tar -xzf "$dir/valkey.tar.gz" -C "$dir"
-  quietly as_root mkdir -p "$VALKEY_HOME/$VERSION"
-  quietly as_root cp -R "$dir/valkey-$VERSION-jammy-$arch/." "$VALKEY_HOME/$VERSION/"
+  quietly as_root mkdir -p "$VALKEY_HOME/$release"
+  quietly as_root cp -R "$dir/valkey-$release-jammy-$arch/." "$VALKEY_HOME/$release/"
   rm -rf "$dir"
-  new_binary=1
-fi
-
-# Point `current` and the commands on the PATH at this version.
-if [ "$installed" != "$VERSION" ]; then
-  quietly as_root ln -sfn "$VALKEY_HOME/$VERSION" "$VALKEY_HOME/current"
+  # Point `current` and the commands on the PATH at this release.
+  quietly as_root ln -sfn "$VALKEY_HOME/$release" "$VALKEY_HOME/current"
   new_binary=1
 fi
 for tool in "${VALKEY_TOOLS[@]}"; do
@@ -136,8 +155,8 @@ WantedBy=multi-user.target"
     [ "$tries" -lt 30 ] || die "Valkey didn't start; see journalctl -u valkey-server"
     sleep 1
   done
-  info "Valkey $VERSION is running on 127.0.0.1:6379"
+  info "Valkey $release is running on 127.0.0.1:6379"
 else
-  info "Valkey $VERSION is installed"
+  info "Valkey $release is installed"
   warn "systemd isn't running, so Valkey won't start on its own; start it with: sudo -u valkey valkey-server $VALKEY_CONFIG --daemonize yes"
 fi
