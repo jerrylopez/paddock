@@ -1,0 +1,89 @@
+name: Release
+
+# Publishes a release when a version tag is pushed: bump `version` in Cargo.toml, merge,
+# then tag that commit `v<version>` and push the tag.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: Build and publish
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl, aarch64-unknown-linux-musl
+
+      - name: Check the tag matches Cargo.toml
+        run: |
+          version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: >-
+          cargo build --locked --release
+          --target x86_64-unknown-linux-musl
+          --target aarch64-unknown-linux-musl
+
+      - name: Package
+        run: >-
+          release/package.sh "$VERSION"
+          "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" dist
+          target/x86_64-unknown-linux-musl/release/paddock
+          target/aarch64-unknown-linux-musl/release/paddock
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # Install each binary with its install.sh in a fresh Debian container of that
+      # architecture. The release isn't published yet, so a copy of the files is
+      # packaged again with a file:// URL.
+      - name: Smoke-test the installer on both architectures
+        run: |
+          release/package.sh "$VERSION" file:///dist smoke \
+            target/x86_64-unknown-linux-musl/release/paddock \
+            target/aarch64-unknown-linux-musl/release/paddock
+          for platform in linux/amd64 linux/arm64; do
+            echo "::group::$platform"
+            docker run --rm --platform "$platform" -v "$PWD/smoke:/dist:ro" \
+              buildpack-deps:bookworm-curl \
+              bash -euc "curl -fsSL file:///dist/install.sh | bash && paddock --version" \
+              | tee /dev/stderr | grep -Fx "paddock $VERSION"
+            echo "::endgroup::"
+          done
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" dist/* "${prerelease[@]}" \
+            --verify-tag --title "Paddock $VERSION" --generate-notes \
+            --notes "Install this release:
+
+          \`\`\`sh
+          curl -fsSL https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/install.sh | bash
+          \`\`\`"

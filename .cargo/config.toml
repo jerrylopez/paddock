@@ -1,3 +1,8 @@
 [alias]
 # Docker-based container tests (tests/container.rs); needs a running Docker daemon.
 container-tests = "test --features container-tests --test container"
+
+# Release builds cross-compile to static musl binaries (.github/workflows/release.yml).
+# Rust's bundled linker handles aarch64, so no cross C toolchain is needed.
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"

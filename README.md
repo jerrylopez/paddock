@@ -59,7 +59,7 @@ The download of Oracle's signing key is checked against its fingerprint.
 
 ```sh
 cargo run -- setup php 8.3   # build and try a command by hand
-cargo test                   # unit tests + binary tests (fast, no Docker)
+cargo test                   # unit, binary and installer tests (fast, no Docker)
 cargo container-tests       # container tests (needs Docker)
 ```
 
@@ -78,3 +78,39 @@ targets need `required-features = ["container-tests"]` in `Cargo.toml`, like `co
 
 In an Amp orb, Docker runs as an orb service declared in `.amp/services.yaml`; start it with
 `amp orb service ensure`.
+
+## Releasing
+
+Each release is one pinned unit: static Linux binaries for x86_64 and aarch64 (the dispatcher
+with every script embedded) plus an `install.sh` that installs exactly that release.
+
+1. Bump `version` in `Cargo.toml`, run `cargo check` to update `Cargo.lock`, and merge.
+2. Tag the merged commit and push the tag:
+
+   ```sh
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+The [release workflow](.github/workflows/release.yml) runs CI, checks the tag matches
+`Cargo.toml`, cross-compiles both binaries, packages them with
+[`release/package.sh`](release/package.sh), installs each one in a container of its
+architecture, and publishes a GitHub release. A version with a suffix (`v0.2.0-rc.1`) is
+published as a prerelease.
+
+A release is installed with the `install.sh` from that release, so the URL is the pin:
+
+```sh
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
+```
+
+[`release/install.sh`](release/install.sh) is the template. `package.sh` writes the version,
+download URL and each binary's SHA-256 into it, and the installer refuses a binary whose
+checksum doesn't match. If the same binary is already installed it does nothing. It installs
+to `/usr/local/bin` (using sudo if needed); set `PADDOCK_INSTALL_DIR` to change that.
+
+To build the release binaries locally:
+
+```sh
+rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl --target aarch64-unknown-linux-musl
+```

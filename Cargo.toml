@@ -16,3 +16,8 @@ container-tests = []
 [[test]]
 name = "container"
 required-features = ["container-tests"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
