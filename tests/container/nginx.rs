@@ -7,31 +7,31 @@ const WELCOME: &str = "curl -fsS http://localhost/ | grep -m1 -o 'Welcome to ngi
 #[test]
 fn serves_the_default_site_under_systemd_and_survives_a_restart() {
     let container = harness::SystemdContainer::start();
+    // Not the newest stable release, so the pin has to pick it.
     let outcome = container.setup_twice_then_verify(
         "nginx",
-        "stable",
+        "1.30.4",
         &[],
         &format!(
             "systemctl is-active nginx\n\
+             nginx -v 2>&1\n\
              apt-get install -y -qq curl >/dev/null 2>&1\n\
              {WELCOME}"
         ),
     );
     assert_eq!(
-        outcome.section("setup (first run)").lines().next(),
-        Some("paddock: nginx: Installing nginx (stable)"),
+        outcome.section("setup (first run)"),
+        "paddock: nginx: Installing nginx 1.30.4\npaddock: nginx: nginx 1.30.4 is running on port 80\n",
         "\n{outcome}"
     );
-    let rerun: Vec<_> = outcome.section("setup (second run)").lines().collect();
-    assert_eq!(rerun.len(), 1, "rerun should print one line\n{outcome}");
-    assert!(
-        rerun[0].starts_with("paddock: nginx: nginx 1.")
-            && rerun[0].ends_with(" (stable) is running on port 80"),
+    assert_eq!(
+        outcome.section("setup (second run)"),
+        "paddock: nginx: nginx 1.30.4 is running on port 80\n",
         "\n{outcome}"
     );
     assert_eq!(
         outcome.section("verify"),
-        "active\nWelcome to nginx!\n",
+        "active\nnginx version: nginx/1.30.4\nWelcome to nginx!\n",
         "\n{outcome}"
     );
 
@@ -42,35 +42,43 @@ fn serves_the_default_site_under_systemd_and_survives_a_restart() {
 }
 
 #[test]
-fn switches_between_mainline_and_stable() {
-    // Mainline has the higher version number, so going back to stable is a downgrade.
+fn switches_releases_across_channels() {
+    // 1.31.x comes from the mainline repository, 1.30.x from stable; going
+    // from 1.31.5 to 1.30.5 is a downgrade.
     let outcome = harness::run(
-        "paddock setup nginx mainline\n\
+        "paddock setup nginx 1.31.5\n\
          nginx -v 2>&1\n\
-         paddock setup nginx stable\n\
+         paddock setup nginx 1.30.5\n\
          nginx -v 2>&1\n\
-         paddock setup nginx stable",
+         paddock setup nginx 1.30.99 || echo \"exit=$?\"\n\
+         paddock setup nginx stable || echo \"exit=$?\"",
     );
     outcome.assert_success();
-    let versions: Vec<u32> = outcome
-        .stdout
-        .lines()
-        .filter_map(|line| line.strip_prefix("nginx version: nginx/1."))
-        .map(|rest| rest.split('.').next().unwrap().parse().unwrap())
-        .collect();
-    assert_eq!(versions.len(), 2, "\n{outcome}");
-    assert!(
-        versions[0] > versions[1],
-        "mainline should be newer\n{outcome}"
-    );
-    assert!(
-        outcome
-            .stdout
-            .contains("paddock: nginx: Switching nginx to stable\n"),
+    let lines: Vec<_> = outcome.stdout.lines().collect();
+    assert_eq!(
+        lines,
+        [
+            "paddock: nginx: Installing nginx 1.31.5",
+            "paddock: nginx: nginx 1.31.5 is installed",
+            "nginx version: nginx/1.31.5",
+            "paddock: nginx: Switching nginx 1.31.5 to 1.30.5",
+            "paddock: nginx: nginx 1.30.5 is installed",
+            "nginx version: nginx/1.30.5",
+            "exit=2",
+            "exit=2",
+        ],
         "\n{outcome}"
     );
     assert!(
-        outcome.stdout.ends_with(" (stable) is installed\n"),
+        outcome
+            .stderr
+            .contains("paddock: nginx: nginx 1.30.99 isn't published (available: "),
+        "\n{outcome}"
+    );
+    assert!(
+        outcome.stderr.contains(
+            "paddock: nginx: version must be an nginx release like 1.30.5 (got 'stable')"
+        ),
         "\n{outcome}"
     );
 }

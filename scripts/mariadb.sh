@@ -1,9 +1,10 @@
-# mariadb.sh: installs MariaDB Server from the MariaDB Foundation's APT repository.
-# Usage (via Paddock): paddock setup mariadb <series> [flags...]
+# mariadb.sh: installs MariaDB Server from the MariaDB Foundation's repositories.
+# Usage (via Paddock): paddock setup mariadb <version> [flags...]
 #
-# <series> is a release series such as 11.4 (10.11, 11.4, 11.8 and 12.3 have
-# bookworm repositories today); the repository provides its latest release.
-# Switching an install to another series isn't supported.
+# <version> is an exact MariaDB release such as 11.4.13. Each release has its
+# own repository on archive.mariadb.org, which stays available, so an install
+# is always exactly that release. Upgrading within a series (11.4.12 to
+# 11.4.13) is supported; going back or to another series isn't.
 #
 #   --database NAME       create a database
 #   --username NAME       create a user (needs --password); with --database it
@@ -26,8 +27,9 @@ option password ""
 option root-password ""
 parse_args "$@"
 
-[[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be a release series like 11.4 (got '$VERSION')"
+[[ $VERSION =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]] ||
+  usage_error "version must be a MariaDB release like 11.4.13 (got '$VERSION')"
+series=${BASH_REMATCH[1]}
 [ -z "$database" ] || [[ $database =~ ^[A-Za-z0-9_]+$ ]] ||
   usage_error "database name may only use letters, digits and _ (got '$database')"
 [ -z "$username" ] || [[ $username =~ ^[A-Za-z0-9_.-]+$ ]] ||
@@ -49,29 +51,37 @@ for package in mysql-community-server mysql-server; do
     die "MySQL is installed; remove it before setting up MariaDB (they can't be installed together)"
 done
 
-# The installed series, e.g. 11.4 from 1:11.4.13+maria~deb12.
-if package_installed mariadb-server; then
-  installed=$(dpkg-query -W -f='${Version}' mariadb-server | sed -E 's/^[0-9]+://; s/^([0-9]+\.[0-9]+).*/\1/')
-  [ "$installed" = "$VERSION" ] ||
-    die "MariaDB $installed is installed; switching to $VERSION isn't supported (remove mariadb-server and /var/lib/mysql first)"
+installed=$(installed_version mariadb-server)
+if [ -n "$installed" ] && [ "$installed" != "$VERSION" ]; then
+  [ "${installed%.*}" = "$series" ] ||
+    die "MariaDB $installed is installed; switching to another series isn't supported (remove mariadb-server and /var/lib/mysql first)"
+  ! dpkg --compare-versions "$VERSION" lt "$installed" ||
+    die "MariaDB $installed is installed; going back to $VERSION isn't supported"
 fi
 
-repository=https://deb.mariadb.org/$VERSION/debian
-if ! package_installed mariadb-server; then
+repository=https://archive.mariadb.org/mariadb-$VERSION/repo/debian
+upgraded=
+if [ "$installed" != "$VERSION" ]; then
   apt_install ca-certificates curl
   curl -fsSIL --retry 3 --retry-connrefused "$repository/dists/$codename/Release" >/dev/null 2>&1 ||
-    usage_error "MariaDB $VERSION has no repository for Debian $codename; see https://mariadb.org/download/ for release series"
+    usage_error "MariaDB $VERSION isn't published for Debian $codename (no $repository); see https://mariadb.org/download/ for releases"
 fi
 apt_keyring mariadb "$MARIADB_KEY_URL" "$MARIADB_KEY_FINGERPRINT"
 apt_source mariadb "deb [signed-by=/etc/apt/keyrings/mariadb.gpg] $repository $codename main"
-# Prefer the repository's packages over Debian's own MariaDB (10.11).
+# Prefer the release's packages over Debian's own MariaDB (10.11).
 write_file "$MARIADB_PIN" "Package: *
-Pin: origin deb.mariadb.org
+Pin: origin archive.mariadb.org
 Pin-Priority: 1001"
 
-if ! package_installed mariadb-server; then
+if [ -z "$installed" ]; then
   info "Installing MariaDB $VERSION"
   apt_install mariadb-server
+elif [ "$installed" != "$VERSION" ]; then
+  info "Upgrading MariaDB $installed to $VERSION"
+  apt_update
+  quietly as_root env DEBIAN_FRONTEND=noninteractive \
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends mariadb-server
+  upgraded=1
 fi
 
 # `ping` succeeds whenever the server is up, even if login would be refused.
@@ -96,7 +106,12 @@ sql_escape() {
 
 temporary=
 if has_systemd; then
+  was_running=$(systemctl is-active mariadb 2>/dev/null) || true
   quietly as_root systemctl enable --now mariadb
+  # Pick up the new binaries after an upgrade.
+  if [ "$was_running" = active ] && [ -n "$upgraded" ]; then
+    quietly as_root systemctl restart mariadb
+  fi
   wait_for_server
 elif [ -n "$database$username$root_password" ] && ! server_running; then
   # No systemd: start a server just long enough to apply the flags.
@@ -142,12 +157,10 @@ summary=
 if [ ${#details[@]} -gt 0 ]; then
   summary=" ($(IFS=,; echo "${details[*]}" | sed 's/,/, /g'))"
 fi
-mariadb_version=$(/usr/sbin/mariadbd --version | awk '{ print $3 }')
-mariadb_version=${mariadb_version%%-*}
 
 if has_systemd; then
-  info "MariaDB $mariadb_version is running on $MARIADB_SOCKET$summary"
+  info "MariaDB $VERSION is running on $MARIADB_SOCKET$summary"
 else
-  info "MariaDB $mariadb_version is installed$summary"
+  info "MariaDB $VERSION is installed$summary"
   warn "systemd isn't running, so MariaDB won't start on its own; start it with: sudo mariadbd-safe --user=mysql &"
 fi

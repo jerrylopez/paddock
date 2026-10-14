@@ -260,6 +260,43 @@ apt_source() {
   _paddock_apt_updated=
 }
 
+# apt_pin NAME VERSION PACKAGE...: pin PACKAGEs to VERSION (an APT version
+# pattern such as 1.30.5-*) in /etc/apt/preferences.d/NAME. The priority is
+# above 1000, so apt installs exactly that version even over a newer one.
+# Sets WROTE like write_file.
+apt_pin() {
+  local name=$1 version=$2
+  shift 2
+  write_file "/etc/apt/preferences.d/$name" "Package: $*
+Pin: version $version
+Pin-Priority: 1001"
+}
+
+# The upstream part of a Debian version: 6:8.2.3-1rl1~bookworm1 -> 8.2.3,
+# 1:11.4.13+maria~deb12 -> 11.4.13, 17.6-1.pgdg12+1 -> 17.6.
+_paddock_upstream_version() {
+  sed -E 's/^[0-9]+://; s/-[^-]*$//; s/[+~].*$//'
+}
+
+# installed_version PACKAGE: PACKAGE's installed upstream version, or nothing.
+installed_version() {
+  package_installed "$1" || return 0
+  dpkg-query -W -f='${Version}' "$1" | _paddock_upstream_version
+}
+
+# require_published PACKAGE LABEL: usage error unless $VERSION is a version of
+# PACKAGE the configured sources offer. Lists releases near the requested one.
+# Call `apt_update` first.
+require_published() {
+  local versions prefix nearby
+  versions=$(apt-cache madison "$1" | awk '{ print $3 }' | _paddock_upstream_version | sort -uV)
+  grep -qxF "$VERSION" <<<"$versions" && return 0
+  prefix=${VERSION%.*}
+  nearby=$(grep -E "^${prefix//./\\.}\\." <<<"$versions" | tail -n 8 | paste -sd ' ') || true
+  [ -n "$nearby" ] || nearby=$(tail -n 8 <<<"$versions" | paste -sd ' ')
+  usage_error "$2 $VERSION isn't published (available: ${nearby:-none})"
+}
+
 # apt_install PACKAGE...: install the packages that aren't installed yet.
 # Refreshes package lists first (see `apt_update`), only if something is missing.
 apt_install() {
@@ -271,5 +308,5 @@ apt_install() {
 
   apt_update
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get -o Acquire::Retries=3 install -y --no-install-recommends "${missing[@]}"
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "${missing[@]}"
 }

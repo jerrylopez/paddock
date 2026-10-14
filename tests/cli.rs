@@ -116,18 +116,22 @@ fn mysql_rejects_unsafe_database_names() {
 }
 
 #[test]
-fn nginx_rejects_version_numbers() {
-    let output = paddock(&["setup", "nginx", "1.30"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert_eq!(
-        stderr(&output),
-        "paddock: nginx: unsupported version '1.30' (supported: stable mainline)\n"
-    );
+fn nginx_rejects_channels_and_partial_versions() {
+    for version in ["stable", "1.30"] {
+        let output = paddock(&["setup", "nginx", version]);
+        assert_eq!(output.status.code(), Some(2));
+        assert_eq!(
+            stderr(&output),
+            format!(
+                "paddock: nginx: version must be an nginx release like 1.30.5 (got '{version}')\n"
+            )
+        );
+    }
 }
 
 #[test]
 fn opensearch_rejects_bad_heap_sizes() {
-    let output = paddock(&["setup", "opensearch", "3", "--heap", "lots"]);
+    let output = paddock(&["setup", "opensearch", "3.9.0", "--heap", "lots"]);
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(
         stderr(&output),
@@ -136,18 +140,18 @@ fn opensearch_rejects_bad_heap_sizes() {
 }
 
 #[test]
-fn postgres_rejects_minor_versions() {
-    let output = paddock(&["setup", "postgres", "17.2"]);
+fn postgres_rejects_major_only_versions() {
+    let output = paddock(&["setup", "postgres", "17"]);
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(
         stderr(&output),
-        "paddock: postgres: version must be a PostgreSQL major version like 17 (got '17.2')\n"
+        "paddock: postgres: version must be a PostgreSQL release like 17.6 (got '17')\n"
     );
 }
 
 #[test]
 fn varnish_rejects_bad_backends() {
-    let output = paddock(&["setup", "varnish", "8.0", "--backend", "localhost"]);
+    let output = paddock(&["setup", "varnish", "8.0.2", "--backend", "localhost"]);
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(
         stderr(&output),
@@ -156,11 +160,34 @@ fn varnish_rejects_bad_backends() {
 }
 
 #[test]
-fn rabbitmq_rejects_3x_series() {
-    let output = paddock(&["setup", "rabbitmq", "3.13"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert_eq!(
-        stderr(&output),
-        "paddock: rabbitmq: version must be a RabbitMQ 4.x series like 4.2 (got '3.13'); 3.x is out of support\n"
-    );
+fn rabbitmq_rejects_series_and_3x_releases() {
+    for version in ["4.2", "3.13.7"] {
+        let output = paddock(&["setup", "rabbitmq", version]);
+        assert_eq!(output.status.code(), Some(2));
+        assert_eq!(
+            stderr(&output),
+            format!(
+                "paddock: rabbitmq: version must be a RabbitMQ 4.x release like 4.2.9 (got '{version}'); 3.x is out of support\n"
+            )
+        );
+    }
+}
+
+#[test]
+fn services_reject_series_instead_of_releases() {
+    for (service, version) in [
+        ("redis", "8.2"),
+        ("elasticsearch", "9"),
+        ("opensearch", "3"),
+        ("varnish", "8.0"),
+        ("mariadb", "11.4"),
+    ] {
+        let output = paddock(&["setup", service, version]);
+        assert_eq!(output.status.code(), Some(2), "{service} {version}");
+        assert!(
+            stderr(&output).contains(&format!("(got '{version}')")),
+            "{service}: {}",
+            stderr(&output)
+        );
+    }
 }

@@ -1,9 +1,9 @@
 # rabbitmq.sh: installs RabbitMQ and a matching Erlang from Team RabbitMQ's APT repositories.
-# Usage (via Paddock): paddock setup rabbitmq <series> [flags...]
+# Usage (via Paddock): paddock setup rabbitmq <version> [flags...]
 #
-# <series> is a RabbitMQ 4.x release series such as 4.2; an APT pin makes the
-# repository provide its latest patch. Moving to a newer series upgrades;
-# going back isn't supported. Team RabbitMQ publishes Erlang for amd64 only,
+# <version> is an exact RabbitMQ 4.x release such as 4.2.9; the repository
+# keeps past releases and an APT pin installs exactly that one. Upgrading is
+# supported; going back isn't. Team RabbitMQ publishes Erlang for amd64 only,
 # and Debian's own Erlang is too old for RabbitMQ 4, so other architectures
 # aren't supported.
 #
@@ -27,8 +27,8 @@ option password ""
 option vhost ""
 parse_args "$@"
 
-[[ $VERSION =~ ^4\.[0-9]+$ ]] ||
-  usage_error "version must be a RabbitMQ 4.x series like 4.2 (got '$VERSION'); 3.x is out of support"
+[[ $VERSION =~ ^4\.[0-9]+\.[0-9]+$ ]] ||
+  usage_error "version must be a RabbitMQ 4.x release like 4.2.9 (got '$VERSION'); 3.x is out of support"
 [ -z "$username" ] || [[ $username =~ ^[A-Za-z0-9_.-]+$ ]] ||
   usage_error "username may only use letters, digits, _, . and - (got '$username')"
 [ -z "$vhost" ] || [[ $vhost =~ ^[A-Za-z0-9_.-]+$ ]] ||
@@ -44,11 +44,7 @@ arch=$(dpkg --print-architecture)
 [ "$arch" = amd64 ] ||
   die "Team RabbitMQ publishes Erlang for amd64 only, and Debian's Erlang is too old for RabbitMQ 4 ($arch isn't supported)"
 
-# The installed series, e.g. 4.2 from 4.2.9-1.
-installed=
-if package_installed rabbitmq-server; then
-  installed=$(dpkg-query -W -f='${Version}' rabbitmq-server | sed -E 's/^([0-9]+\.[0-9]+).*/\1/')
-fi
+installed=$(installed_version rabbitmq-server)
 if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
   dpkg --compare-versions "$VERSION" lt "$installed"; then
   die "RabbitMQ $installed is installed; going back to $VERSION isn't supported"
@@ -58,29 +54,23 @@ apt_keyring rabbitmq "$RABBITMQ_KEY_URL" "$RABBITMQ_KEY_FINGERPRINT"
 repo="[signed-by=/etc/apt/keyrings/rabbitmq.gpg] https://deb1.rabbitmq.com"
 apt_source rabbitmq "deb $repo/rabbitmq-erlang/debian/$codename $codename main
 deb $repo/rabbitmq-server/debian/$codename $codename main"
-# Erlang from Team RabbitMQ rather than Debian, and the requested series.
+# Erlang from Team RabbitMQ rather than Debian, and exactly this release.
 write_file "$RABBITMQ_PIN" "Package: erlang*
 Pin: origin deb1.rabbitmq.com
 Pin-Priority: 1001
 
 Package: rabbitmq-server
-Pin: version $VERSION.*
+Pin: version $VERSION-*
 Pin-Priority: 1001"
-
-available_series() {
-  apt-cache madison rabbitmq-server | awk '{ print $3 }' |
-    sed -E 's/^([0-9]+\.[0-9]+).*/\1/' | grep '^4\.' | sort -uV | paste -sd ' '
-}
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  apt-cache madison rabbitmq-server | awk '{ print $3 }' | grep -q "^$VERSION\." ||
-    usage_error "RabbitMQ $VERSION isn't available (available: $(available_series))"
+  require_published rabbitmq-server RabbitMQ
   if [ -n "$installed" ]; then
     info "Upgrading RabbitMQ $installed to $VERSION"
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
-      apt-get -o Acquire::Retries=3 install -y --no-install-recommends rabbitmq-server
+      apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends rabbitmq-server
     upgraded=1
   else
     info "Installing RabbitMQ $VERSION"
@@ -150,12 +140,10 @@ details=("management UI on http://localhost:15672")
 [ -z "$username" ] || details+=("user: $username")
 [ -z "$vhost" ] || details+=("vhost: $vhost")
 summary=" ($(IFS=,; echo "${details[*]}" | sed 's/,/, /g'))"
-rabbitmq_version=$(dpkg-query -W -f='${Version}' rabbitmq-server)
-rabbitmq_version=${rabbitmq_version%%-*}
 
 if has_systemd; then
-  info "RabbitMQ $rabbitmq_version is running on 127.0.0.1:5672$summary"
+  info "RabbitMQ $VERSION is running on 127.0.0.1:5672$summary"
 else
-  info "RabbitMQ $rabbitmq_version is installed$summary"
+  info "RabbitMQ $VERSION is installed$summary"
   warn "systemd isn't running, so RabbitMQ won't start on its own; start it with: sudo rabbitmq-server -detached"
 fi

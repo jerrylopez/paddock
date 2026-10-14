@@ -1,9 +1,11 @@
 # varnish.sh: installs Varnish Cache from its official packagecloud repositories.
-# Usage (via Paddock): paddock setup varnish <series> [flags...]
+# Usage (via Paddock): paddock setup varnish <version> [flags...]
 #
-# <series> is 6.0 (LTS), 7.6, 7.7 or 8.0; the repository provides its latest
-# release. Running setup with another series switches to it (Varnish only
-# holds a cache, so going back is fine too).
+# <version> is an exact release in a supported series: 6.0 (LTS), 7.6, 7.7 or
+# 8.0, e.g. 8.0.2. Each series has its own repository, which keeps past
+# releases; an APT pin installs exactly the one asked for. Running setup with
+# another release switches to it (Varnish only holds a cache, so going back is
+# fine too).
 #
 #   --backend HOST:PORT   the server Varnish caches (default 127.0.0.1:8080)
 #   --port PORT           where Varnish listens on 127.0.0.1 (default 6081)
@@ -12,8 +14,6 @@
 # Paddock writes /etc/varnish/paddock.vcl and a systemd drop-in that starts
 # varnishd with it; the package's default.vcl is left alone.
 
-VARNISH_SOURCE=/etc/apt/sources.list.d/varnish.list
-VARNISH_PIN=/etc/apt/preferences.d/varnish
 VARNISH_VCL=/etc/varnish/paddock.vcl
 VARNISH_DROPIN=/etc/systemd/system/varnish.service.d/paddock.conf
 
@@ -22,13 +22,16 @@ option port 6081
 option memory 256m
 parse_args "$@"
 
+[[ $VERSION =~ ^([0-9]+\.[0-9]+)\.[0-9]+$ ]] ||
+  usage_error "version must be a Varnish release like 8.0.2 (got '$VERSION')"
+series=${BASH_REMATCH[1]}
 # Each series has its own repository and signing key.
-case $VERSION in
+case $series in
   6.0) repo=varnish60lts key=48D81A24CB0456F5D59431D94CFCFD6BA750EDCD ;;
   7.6) repo=varnish76 key=6B803A8DF5983DDEB704FF7435BA265D95368ADC ;;
   7.7) repo=varnish77 key=7B9C4CC47FCF4E7D1B39889094C63CC2D7584016 ;;
   8.0) repo=varnish80 key=42E4EDD233A3463A90671EEAFC3FECD870B8A552 ;;
-  *) require_version 6.0 7.6 7.7 8.0 ;;
+  *) usage_error "Varnish $VERSION isn't in a supported series (6.0, 7.6, 7.7, 8.0)" ;;
 esac
 [[ $backend =~ ^([A-Za-z0-9.-]+):([0-9]+)$ ]] ||
   usage_error "--backend must be HOST:PORT (got '$backend')"
@@ -46,26 +49,23 @@ case $(dpkg --print-architecture) in
 esac
 
 apt_keyring "varnish-$repo" "https://packagecloud.io/varnishcache/$repo/gpgkey" "$key"
-line="deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ $codename main"
-switching=
-if [ ! -f "$VARNISH_SOURCE" ] || [ "$(cat "$VARNISH_SOURCE")" != "$line" ]; then
-  switching=1
-fi
-apt_source varnish "$line"
-# Prefer the repository's packages over Debian's own Varnish (7.1). Above
-# 1000 also lets apt move to an older series.
-write_file "$VARNISH_PIN" "Package: varnish varnish-dev
-Pin: origin packagecloud.io
-Pin-Priority: 1001"
+apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ $codename main"
+# Exactly this release, over Debian's own Varnish (7.1) and over newer ones.
+apt_pin varnish "$VERSION-*" varnish
 
-if ! package_installed varnish; then
-  info "Installing Varnish $VERSION"
-  apt_install varnish
-elif [ -n "$switching" ]; then
-  info "Switching Varnish to $VERSION"
+installed=$(installed_version varnish)
+switching=
+if [ "$installed" != "$VERSION" ]; then
   apt_update
+  require_published varnish Varnish
+  if [ -n "$installed" ]; then
+    info "Switching Varnish $installed to $VERSION"
+    switching=1
+  else
+    info "Installing Varnish $VERSION"
+  fi
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get -o Acquire::Retries=3 install -y --allow-downgrades --no-install-recommends varnish
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --allow-downgrades --no-install-recommends varnish
 fi
 
 write_file "$VARNISH_VCL" "# Managed by Paddock (paddock setup varnish).
@@ -78,7 +78,6 @@ backend default {
 restart=$WROTE
 quietly as_root /usr/sbin/varnishd -C -f "$VARNISH_VCL"
 
-varnish_version=$(/usr/sbin/varnishd -V 2>&1 | sed -nE 's/^varnishd \(varnish-([0-9.]+) .*/\1/p')
 start="/usr/sbin/varnishd -F -a 127.0.0.1:$port -f $VARNISH_VCL -s malloc,$memory"
 if has_systemd; then
   # The package units differ by series; run varnishd in the foreground the same way for all.
@@ -103,8 +102,8 @@ ExecStart=$start"
     [ "$tries" -lt 30 ] || die "Varnish didn't start; see journalctl -u varnish"
     sleep 1
   done
-  info "Varnish $varnish_version is running on 127.0.0.1:$port, caching $backend"
+  info "Varnish $VERSION is running on 127.0.0.1:$port, caching $backend"
 else
-  info "Varnish $varnish_version is installed, caching $backend"
+  info "Varnish $VERSION is installed, caching $backend"
   warn "systemd isn't running, so Varnish won't start on its own; start it with: sudo ${start/ -F / }"
 fi

@@ -1,9 +1,9 @@
 # redis.sh: installs Redis from its official APT repository (packages.redis.io).
-# Usage (via Paddock): paddock setup redis <major.minor> [--password PASSWORD]
+# Usage (via Paddock): paddock setup redis <version> [--password PASSWORD]
 #
-# <major.minor> picks a release series such as 8.2; an APT pin makes the
-# repository provide its latest patch. Moving to a newer series upgrades;
-# going back to an older one isn't supported.
+# <version> is an exact Redis release such as 8.2.3; the repository keeps past
+# releases and an APT pin installs exactly that one. Upgrading is supported;
+# going back to an older release isn't.
 #
 # Redis listens on 127.0.0.1:6379 (the package default). --password sets
 # `requirepass` in /etc/redis/paddock.conf, which includes the package's own
@@ -11,15 +11,14 @@
 
 REDIS_KEY_URL=https://packages.redis.io/gpg
 REDIS_KEY_FINGERPRINT=54318FA4052D1E61A6B6F7BB5F4349D6BF53AA0C
-REDIS_PIN=/etc/apt/preferences.d/redis
 REDIS_CONFIG=/etc/redis/paddock.conf
 REDIS_DROPIN=/etc/systemd/system/redis-server.service.d/paddock.conf
 
 option password ""
 parse_args "$@"
 
-[[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be a release series like 8.2 (got '$VERSION')"
+[[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  usage_error "version must be a Redis release like 8.2.3 (got '$VERSION')"
 [[ $password != *[[:space:]\"\']* ]] ||
   usage_error "--password can't contain spaces or quotes"
 
@@ -36,11 +35,7 @@ if [ -e /opt/valkey/current ] || package_installed valkey-server; then
   die "Valkey is installed and uses the same port; remove it before setting up Redis"
 fi
 
-# The installed series, e.g. 8.2 from 6:8.2.3-1rl1~bookworm1.
-installed=
-if package_installed redis-server; then
-  installed=$(dpkg-query -W -f='${Version}' redis-server | sed -E 's/^[0-9]+://; s/^([0-9]+\.[0-9]+).*/\1/')
-fi
+installed=$(installed_version redis-server)
 if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
   dpkg --compare-versions "$VERSION" lt "$installed"; then
   die "Redis $installed is installed; going back to $VERSION isn't supported (its data may not be readable by older versions)"
@@ -48,25 +43,16 @@ fi
 
 apt_keyring redis "$REDIS_KEY_URL" "$REDIS_KEY_FINGERPRINT"
 apt_source redis "deb [signed-by=/etc/apt/keyrings/redis.gpg] https://packages.redis.io/deb $codename main"
-# Above 1000, so the pinned series wins over newer ones.
-write_file "$REDIS_PIN" "Package: redis redis-server redis-tools
-Pin: version 6:$VERSION.*
-Pin-Priority: 1001"
-
-available_series() {
-  apt-cache madison redis-server | awk '{ print $3 }' |
-    sed -E 's/^[0-9]+://; s/^([0-9]+\.[0-9]+).*/\1/' | sort -uV | paste -sd ' '
-}
+apt_pin redis "6:$VERSION-*" redis redis-server redis-tools
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  apt-cache madison redis-server | awk '{ print $3 }' | grep -q "^6:$VERSION\." ||
-    usage_error "Redis $VERSION isn't available (available: $(available_series))"
+  require_published redis-server Redis
   if [ -n "$installed" ]; then
     info "Upgrading Redis $installed to $VERSION"
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
-      apt-get -o Acquire::Retries=3 install -y --no-install-recommends redis-server redis-tools
+      apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends redis-server redis-tools
     upgraded=1
   else
     info "Installing Redis $VERSION"
@@ -91,7 +77,6 @@ redis_ping() {
   fi
 }
 
-redis_version=$(redis-server --version | sed -nE 's/.* v=([0-9.]+) .*/\1/p')
 if has_systemd; then
   write_file "$REDIS_DROPIN" "# Managed by Paddock (paddock setup redis).
 [Service]
@@ -113,8 +98,8 @@ ExecStart=/usr/bin/redis-server $REDIS_CONFIG"
     [ "$tries" -lt 30 ] || die "Redis didn't start; see journalctl -u redis-server"
     sleep 1
   done
-  info "Redis $redis_version is running on 127.0.0.1:6379"
+  info "Redis $VERSION is running on 127.0.0.1:6379"
 else
-  info "Redis $redis_version is installed"
+  info "Redis $VERSION is installed"
   warn "systemd isn't running, so Redis won't start on its own; start it with: sudo -u redis redis-server $REDIS_CONFIG"
 fi
