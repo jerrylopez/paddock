@@ -90,6 +90,7 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `die MSG` | Reports a failure and exits 1 |
 | `usage_error MSG` | Reports a bad version or flag and exits 2 |
 | `quietly CMD...` | Runs CMD silently; on failure prints its output and exits with its status |
+| `download URL FILE` | Fetches URL into FILE with `curl`, retrying transient network errors |
 | `as_root CMD...` | Runs CMD as root, through `sudo` when needed |
 | `apt_install PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing |
 | `apt_update` | Refreshes package lists, at most once per setup unless `apt_source` changed a source |

@@ -41,7 +41,7 @@ if [ "$installed" != "$VERSION" ]; then
   fi
   apt_install ca-certificates curl
   url=https://dl.typesense.org/releases/$VERSION/typesense-server-$VERSION-$arch.deb
-  curl -fsSI "$url" >/dev/null 2>&1 ||
+  curl -fsSI --retry 3 --retry-connrefused "$url" >/dev/null 2>&1 ||
     usage_error "Typesense $VERSION isn't published (no $url); see https://typesense.org/docs/ for releases"
 
   if [ -n "$installed" ]; then
@@ -50,7 +50,7 @@ if [ "$installed" != "$VERSION" ]; then
     info "Installing Typesense $VERSION"
   fi
   dir=$(mktemp -d)
-  quietly curl -fsSL -o "$dir/typesense.deb" "$url"
+  download "$url" "$dir/typesense.deb"
   # The package's post-install script runs systemctl and fails without it.
   # Without systemd, give it a stand-in that does nothing.
   # dpkg needs root's usual PATH (with the sbin directories), not the caller's.
