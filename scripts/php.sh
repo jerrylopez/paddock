@@ -1,6 +1,7 @@
 # php.sh: installs the PHP CLI from packages.sury.org (Ondřej Surý's Debian repository),
-# plus Composer from getcomposer.org.
-# Usage (via Paddock): paddock setup php <version> [--extensions a,b,c]
+# plus Composer from getcomposer.org. `paddock setup php-fpm` runs this script too and
+# also installs PHP-FPM, enabled under systemd.
+# Usage (via Paddock): paddock setup php|php-fpm <version> [--extensions a,b,c]
 #
 # <version> is major.minor, e.g. 8.3; the repository provides the latest patch.
 # --extensions adds to DEFAULT_EXTENSIONS. Names are as `php -m` shows them
@@ -53,6 +54,8 @@ codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
 [ "$os" = debian ] || die "only Debian is supported (this system is '$os')"
 
 php=php$VERSION
+fpm=
+[ "$SERVICE" != php-fpm ] || fpm=$php-fpm
 
 add_sury_repository() {
   if ! package_installed debsuryorg-archive-keyring; then
@@ -66,9 +69,13 @@ add_sury_repository() {
   apt_source php "deb [signed-by=$SURY_KEYRING] https://packages.sury.org/php/ $codename main"
 }
 
-# Extensions PHP has loaded, named like `requested`.
+# Extensions a PHP binary loads, named like `requested`.
+extensions_of() {
+  "$1" -m | sed -e '/^\[/d' -e '/^$/d' -e 's/^Zend //' | tr '[:upper:] ' '[:lower:]_' | sort -u
+}
+
 loaded_extensions() {
-  "$php" -m | sed -e '/^\[/d' -e '/^$/d' -e 's/^Zend //' | tr '[:upper:] ' '[:lower:]_' | sort -u
+  extensions_of "$php"
 }
 
 is_loaded() {
@@ -116,6 +123,12 @@ if ! package_installed "$php-cli"; then
   apt_install "$php-cli"
 fi
 
+# FPM goes in before extensions, so extension packages enable themselves for it.
+if [ -n "$fpm" ] && ! package_installed "$fpm"; then
+  info "Installing PHP-FPM $VERSION"
+  apt_install "$fpm"
+fi
+
 # Extensions built into PHP are loaded already; the rest come from packages.
 loaded=$(loaded_extensions)
 missing=()
@@ -150,6 +163,7 @@ if [ ${#missing[@]} -gt 0 ]; then
   if [ ${#packages[@]} -gt 0 ]; then
     [ -n "$fresh" ] || info "Installing PHP $VERSION extensions: ${installing[*]}"
     apt_install "${packages[@]}"
+    new_extensions=1
     loaded=$(loaded_extensions)
     for name in "${installing[@]}"; do
       is_loaded "$name" || die "extension $name is installed but PHP $VERSION doesn't load it"
@@ -186,4 +200,32 @@ for name in "${requested[@]}"; do
 done
 # Drop Debian's build suffix, e.g. 7.1.33-79+0~20260703 -> 7.1.33.
 php_version=$("$php" -r 'echo PHP_VERSION;')
-info "PHP ${php_version%%-*} and Composer $composer are ready (extensions: ${ready[*]})"
+php_version=${php_version%%-*}
+
+if [ -z "$fpm" ]; then
+  info "PHP $php_version and Composer $composer are ready (extensions: ${ready[*]})"
+  exit 0
+fi
+
+fpm_binary=/usr/sbin/php-fpm$VERSION
+fpm_socket=/run/php/php$VERSION-fpm.sock
+fpm_extensions=$(extensions_of "$fpm_binary")
+for name in "${ready[@]}"; do
+  # Debian builds these for the CLI only; they make no sense in a web server.
+  case $name in pcntl | readline) continue ;; esac
+  grep -qx "$name" <<<"$fpm_extensions" ||
+    die "extension $name loads in the PHP $VERSION CLI but not in PHP-FPM"
+done
+quietly as_root "$fpm_binary" --test
+
+if has_systemd; then
+  quietly as_root systemctl enable --now "$fpm"
+  # A running FPM only picks up new extensions when it restarts.
+  if [ -n "${new_extensions:-}" ]; then
+    quietly as_root systemctl restart "$fpm"
+  fi
+  info "PHP $php_version, PHP-FPM on $fpm_socket and Composer $composer are ready (extensions: ${ready[*]})"
+else
+  info "PHP $php_version, PHP-FPM and Composer $composer are installed (extensions: ${ready[*]})"
+  warn "systemd isn't running, so PHP-FPM won't start on its own; start it with: sudo mkdir -p /run/php && sudo $fpm_binary --daemonize"
+fi
