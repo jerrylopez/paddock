@@ -59,6 +59,19 @@ The download of Oracle's signing key is checked against its fingerprint.
   running.
 - Oracle publishes Debian packages for amd64 and i386 only, so ARM machines aren't supported.
 
+### nginx
+
+```sh
+paddock setup nginx stable
+paddock setup nginx mainline
+```
+
+Installs nginx from [nginx.org's repository](https://nginx.org/en/linux_packages.html). The
+version is one of its two channels, `stable` or `mainline`; the repository provides the latest
+release in it, and running setup with the other channel switches to it. nginx.org's packages
+take priority over Debian's own nginx. The default site answers on port 80. Under systemd,
+nginx is enabled and started. Wiring nginx to PHP-FPM is left to presets.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

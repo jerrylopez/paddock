@@ -123,3 +123,13 @@ fn mysql_rejects_unsafe_database_names() {
         "paddock: mysql: database name may only use letters, digits and _ (got 'app`; drop')\n"
     );
 }
+
+#[test]
+fn nginx_rejects_version_numbers() {
+    let output = paddock(&["setup", "nginx", "1.30"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: nginx: unsupported version '1.30' (supported: stable mainline)\n"
+    );
+}

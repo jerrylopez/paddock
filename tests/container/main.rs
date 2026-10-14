@@ -9,5 +9,6 @@ mod harness;
 
 mod basics;
 mod mysql;
+mod nginx;
 mod php;
 mod php_fpm;
