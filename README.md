@@ -175,6 +175,23 @@ latest patch. Moving to a newer series upgrades; going back isn't supported.
   starts `redis-server` with it, so the package's file is never edited.
 - Refuses to install next to Valkey, which uses the same port.
 
+### Varnish
+
+```sh
+paddock setup varnish 8.0
+paddock setup varnish 6.0 --backend 127.0.0.1:3000 --port 6081 --memory 512m
+```
+
+Installs Varnish Cache from [its packagecloud repositories](https://packagecloud.io/varnishcache).
+The version is a series: `6.0` (LTS), `7.6`, `7.7` or `8.0`; the repository provides its latest
+release, and running setup with another series switches to it. The repository's packages take
+priority over Debian's own Varnish.
+
+- Listens on `127.0.0.1:6081` (`--port`) and caches `--backend` (default `127.0.0.1:8080`) in
+  `--memory` (default `256m`).
+- Paddock writes `/etc/varnish/paddock.vcl` and a systemd drop-in that starts `varnishd` with it;
+  the package's `default.vcl` is left alone.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

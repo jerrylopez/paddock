@@ -144,3 +144,13 @@ fn postgres_rejects_minor_versions() {
         "paddock: postgres: version must be a PostgreSQL major version like 17 (got '17.2')\n"
     );
 }
+
+#[test]
+fn varnish_rejects_bad_backends() {
+    let output = paddock(&["setup", "varnish", "8.0", "--backend", "localhost"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: varnish: --backend must be HOST:PORT (got 'localhost')\n"
+    );
+}

@@ -18,3 +18,4 @@ mod postgres;
 mod redis;
 mod typesense;
 mod valkey;
+mod varnish;
