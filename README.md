@@ -26,6 +26,18 @@ Surý's repository (the Debian counterpart of his Ubuntu PPA), and
   is checked against the SHA-256 checksum getcomposer.org publishes.
 - With several versions installed, `php` runs the one set up most recently.
 
+### PHP-FPM
+
+```sh
+paddock setup php-fpm 8.3
+paddock setup php-fpm 8.4 --extensions xdebug
+```
+
+Everything `paddock setup php` does, plus PHP-FPM for the same version, enabled and started
+under systemd as `php<version>-fpm`. It listens on `/run/php/php<version>-fpm.sock`, which the
+ready line prints. Extensions are shared with the CLI, except the CLI-only `pcntl` and
+`readline`. Without systemd, PHP-FPM is installed and its config checked, but not started.
+
 ### MySQL
 
 ```sh

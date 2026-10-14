@@ -19,19 +19,25 @@ pub struct Service {
     pub script: &'static str,
 }
 
-/// Registers a service whose install script is `scripts/<name>.sh`.
+/// Registers a service whose install script is `scripts/<name>.sh`, or
+/// `scripts/<script>.sh` when several services share one script. The script
+/// can tell them apart by `$SERVICE`.
 macro_rules! service {
     ($name:literal, $about:literal) => {
+        service!($name, $about, script = $name)
+    };
+    ($name:literal, $about:literal, script = $script:literal) => {
         Service {
             name: $name,
             about: $about,
-            script: include_str!(concat!("../scripts/", $name, ".sh")),
+            script: include_str!(concat!("../scripts/", $script, ".sh")),
         }
     };
 }
 
 pub const SERVICES: &[Service] = &[
     service!("php", "PHP CLI with extensions"),
+    service!("php-fpm", "PHP-FPM and the PHP CLI", script = "php"),
     service!("mysql", "MySQL server"),
     service!("typesense", "Typesense search server"),
 ];

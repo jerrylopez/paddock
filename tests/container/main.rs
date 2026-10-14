@@ -10,3 +10,4 @@ mod harness;
 mod basics;
 mod mysql;
 mod php;
+mod php_fpm;
