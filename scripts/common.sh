@@ -195,10 +195,10 @@ apt_update() {
 # writing as root only if it differs. Sets WROTE=1 if it wrote, else WROTE=.
 write_file() {
   WROTE=
-  if [ -f "$1" ] && [ "$(cat "$1")" = "$2" ]; then
+  _paddock_require_root
+  if [ -f "$1" ] && [ "$(as_root cat "$1")" = "$2" ]; then
     return 0
   fi
-  _paddock_require_root
   as_root mkdir -p "$(dirname "$1")"
   printf '%s\n' "$2" | as_root tee "$1" >/dev/null
   WROTE=1
