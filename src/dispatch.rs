@@ -38,6 +38,10 @@ macro_rules! service {
 pub const SERVICES: &[Service] = &[
     service!("php", "PHP CLI with extensions"),
     service!("php-fpm", "PHP-FPM and the PHP CLI", script = "php"),
+    service!(
+        "elasticsearch",
+        "Elasticsearch search engine (single local node)"
+    ),
     service!("mysql", "MySQL server"),
     service!("nginx", "nginx web server (stable or mainline)"),
     service!("opensearch", "OpenSearch search engine (single local node)"),
