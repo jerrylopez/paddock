@@ -15,9 +15,16 @@ script and pipes it to bash:
   `DEBIAN_FRONTEND=noninteractive` is exported.
 - stdout and stderr go straight to the terminal.
 
-Scripts run in Amp orbs (Debian 12, a normal user with passwordless sudo) and in the test
-containers (Debian, root, no sudo, no systemd). Use `as_root` for privileged commands. Don't
-assume systemd: start daemons directly.
+Scripts run in Amp orbs (Debian 12, a normal user with passwordless sudo, systemd) and in the
+test containers (Debian, root, no sudo, no systemd). Use `as_root` for privileged commands, and
+don't rely on `/usr/sbin` being on the PATH: a normal user's PATH doesn't include it.
+
+Daemons belong to systemd. When `has_systemd` succeeds, enable and start the unit with
+`as_root systemctl enable --now <unit>`: systemd keeps it running and starts it again after
+every boot or orb wake, so nothing needs to go in `.agents/resume`. For software without a
+unit, write one. Without systemd, still install everything, start a temporary server if the
+script needs one for configuration, stop it again, and `warn` that the daemon won't start on
+its own (see `mysql.sh`).
 
 ## The rules
 
@@ -89,6 +96,7 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `apt_source NAME LINE` | Makes `/etc/apt/sources.list.d/NAME.list` contain LINE; if that changes it, lists are refreshed again |
 | `package_installed PKG` | Succeeds if the Debian package is installed |
 | `has_command NAME` | Succeeds if NAME is on the PATH |
+| `has_systemd` | Succeeds if systemd manages the system (orbs, servers), not in a plain container |
 
 Pitfalls:
 
