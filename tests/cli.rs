@@ -66,15 +66,6 @@ fn missing_version_is_rejected() {
 }
 
 #[test]
-fn setup_runs_the_embedded_service_script() {
-    let output = paddock(&["setup", "typesense", "27.1"]);
-    assert_eq!(output.status.code(), Some(1));
-    assert_eq!(stderr(&output), "paddock: typesense: not implemented yet\n");
-}
-
-// These are rejected before Paddock touches the system, so they're safe on the host.
-
-#[test]
 fn php_rejects_patch_versions() {
     let output = paddock(&["setup", "php", "8.3.1"]);
     assert_eq!(output.status.code(), Some(2));

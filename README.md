@@ -89,6 +89,24 @@ The version is the major (`2` or `3`); the repository provides the latest releas
 - Switching an install to another major isn't supported, and it refuses to install next to
   Elasticsearch, which uses the same port.
 
+### Typesense
+
+```sh
+paddock setup typesense 30.2
+paddock setup typesense 30.2 --api-key secret
+```
+
+Installs Typesense from [its official `.deb` packages](https://typesense.org/docs/guide/install-typesense.html).
+There's no APT repository, so the version is an exact release. Upgrading is supported; going
+back to an older version isn't.
+
+- Listens on `127.0.0.1:8108`. The API key is `--api-key` if given, otherwise the key already
+  configured, otherwise a generated one. It's in `/etc/typesense/typesense-server.ini`, readable
+  by root only.
+- Under systemd, Typesense is enabled and started, and setup waits for `/health`.
+- Typesense publishes no checksums, so the download is trusted on HTTPS from dl.typesense.org,
+  as in its own install instructions.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):
