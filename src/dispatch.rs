@@ -44,7 +44,7 @@ pub const SERVICES: &[Service] = &[
     ),
     service!("mariadb", "MariaDB server"),
     service!("mysql", "MySQL server"),
-    service!("nginx", "nginx web server (stable or mainline)"),
+    service!("nginx", "nginx web server"),
     service!("opensearch", "OpenSearch search engine (single local node)"),
     service!("postgres", "PostgreSQL server"),
     service!("rabbitmq", "RabbitMQ message broker"),

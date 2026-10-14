@@ -1,9 +1,11 @@
 # nginx.sh: installs nginx from nginx.org's official APT repository.
-# Usage (via Paddock): paddock setup nginx stable|mainline
+# Usage (via Paddock): paddock setup nginx <version>
 #
-# The version picks one of nginx.org's two channels; the repository provides
-# the latest release in it. The package's default site answers on port 80.
-# Under systemd, nginx is enabled and started.
+# <version> is an exact nginx release such as 1.30.5. nginx.org publishes even
+# minor versions (1.30) in its stable repository and odd ones (1.31) in its
+# mainline repository, and keeps past releases in both. Running setup with
+# another release switches to it, older or newer. The package's default site
+# answers on port 80. Under systemd, nginx is enabled and started.
 
 NGINX_KEY_URL=https://nginx.org/keys/nginx_signing.key
 # The keys nginx.org lists for verifying its packages.
@@ -12,16 +14,16 @@ NGINX_KEY_FINGERPRINTS=(
   8540A6F18833A80E9C1653A42FD21310B49F6B46
   9E9BE90EACBCDE69FE9B204CBCDCD8A38D88A2B3
 )
-NGINX_SOURCE=/etc/apt/sources.list.d/nginx.list
-NGINX_PIN=/etc/apt/preferences.d/nginx
 
 parse_args "$@"
 
-case $VERSION in
-  stable) path=packages/debian ;;
-  mainline) path=packages/mainline/debian ;;
-  *) require_version stable mainline ;;
-esac
+[[ $VERSION =~ ^1\.([0-9]+)\.[0-9]+$ ]] ||
+  usage_error "version must be an nginx release like 1.30.5 (got '$VERSION')"
+if (( BASH_REMATCH[1] % 2 == 0 )); then
+  path=packages/debian
+else
+  path=packages/mainline/debian
+fi
 
 # Read in a subshell: os-release defines its own VERSION.
 os=$(. /etc/os-release && echo "${ID:-unknown}")
@@ -34,42 +36,35 @@ case $arch in
 esac
 
 apt_keyring nginx "$NGINX_KEY_URL" "${NGINX_KEY_FINGERPRINTS[@]}"
-line="deb [signed-by=/etc/apt/keyrings/nginx.gpg] https://nginx.org/$path $codename nginx"
-switching=
-if [ ! -f "$NGINX_SOURCE" ] || [ "$(cat "$NGINX_SOURCE")" != "$line" ]; then
-  switching=1
-fi
-apt_source nginx "$line"
+apt_source nginx "deb [signed-by=/etc/apt/keyrings/nginx.gpg] https://nginx.org/$path $codename nginx"
+# Exactly this release, over Debian's own nginx and over newer ones.
+apt_pin nginx "$VERSION-*" nginx
 
-# Prefer nginx.org's packages over Debian's own nginx. A priority above 1000
-# also lets apt move from mainline back to the lower-numbered stable.
-pin=$'Package: *\nPin: origin nginx.org\nPin-Priority: 1001'
-if [ ! -f "$NGINX_PIN" ] || [ "$(cat "$NGINX_PIN")" != "$pin" ]; then
-  printf '%s\n' "$pin" | as_root tee "$NGINX_PIN" >/dev/null
-fi
-
-if ! package_installed nginx; then
-  info "Installing nginx ($VERSION)"
-  apt_install nginx
-elif [ -n "$switching" ]; then
-  # Installed from the other channel, or from Debian: install this channel's.
-  info "Switching nginx to $VERSION"
+installed=$(installed_version nginx)
+if [ "$installed" != "$VERSION" ]; then
   apt_update
+  require_published nginx nginx
+  if [ -n "$installed" ]; then
+    info "Switching nginx $installed to $VERSION"
+  else
+    info "Installing nginx $VERSION"
+  fi
+  # nginx keeps no data, so going back to an older release is fine.
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get -o Acquire::Retries=3 install -y --allow-downgrades --no-install-recommends nginx
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --allow-downgrades --no-install-recommends nginx
 fi
 
 quietly as_root /usr/sbin/nginx -t
 
-nginx_version=$(/usr/sbin/nginx -v 2>&1 | sed -n 's|^nginx version: nginx/||p')
 if has_systemd; then
+  was_running=$(systemctl is-active nginx 2>/dev/null) || true
   quietly as_root systemctl enable --now nginx
-  # Pick up a new binary after switching channels.
-  if [ -n "$switching" ]; then
+  # Pick up a new binary after switching releases.
+  if [ "$was_running" = active ] && [ "$installed" != "$VERSION" ]; then
     quietly as_root systemctl restart nginx
   fi
-  info "nginx $nginx_version ($VERSION) is running on port 80"
+  info "nginx $VERSION is running on port 80"
 else
-  info "nginx $nginx_version ($VERSION) is installed"
+  info "nginx $VERSION is installed"
   warn "systemd isn't running, so nginx won't start on its own; start it with: sudo nginx"
 fi

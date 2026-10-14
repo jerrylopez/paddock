@@ -41,12 +41,13 @@ ready line prints. Extensions are shared with the CLI, except the CLI-only `pcnt
 ### Elasticsearch
 
 ```sh
-paddock setup elasticsearch 9
-paddock setup elasticsearch 8 --heap 1g
+paddock setup elasticsearch 9.5.5
+paddock setup elasticsearch 8.19.23 --heap 1g
 ```
 
 Installs Elasticsearch from [Elastic's APT repository](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-debian-package).
-The version is the major (`8` or `9`); the repository provides the latest release in it.
+The version is an exact 8.x or 9.x release; Elastic keeps past releases and an APT pin installs
+exactly that one. Upgrading within a major is supported; going back isn't.
 
 - Configured for local development: one node on `127.0.0.1:9200`, security disabled (no TLS or
   passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
@@ -58,13 +59,14 @@ The version is the major (`8` or `9`); the repository provides the latest releas
 ### MariaDB
 
 ```sh
-paddock setup mariadb 11.4
-paddock setup mariadb 10.11 --database app --username app --password secret
+paddock setup mariadb 11.4.13
+paddock setup mariadb 10.11.19 --database app --username app --password secret
 ```
 
 Installs MariaDB Server from [the MariaDB Foundation's repository](https://mariadb.org/download/).
-The version is a release series with a bookworm repository (10.11, 11.4, 11.8 and 12.3 today); the
-repository provides its latest release, and its packages take priority over Debian's own MariaDB.
+The version is an exact release. Each release has its own repository on archive.mariadb.org, which
+stays available, so an install is always exactly that release; its packages take priority over
+Debian's own MariaDB. Upgrading within a series (11.4.12 to 11.4.13) is supported.
 
 - Same flags as MySQL. With `--root-password`, root can log in with that password and still
   through the Unix socket (`sudo mariadb`).
@@ -95,25 +97,27 @@ The download of Oracle's signing key is checked against its fingerprint.
 ### nginx
 
 ```sh
-paddock setup nginx stable
-paddock setup nginx mainline
+paddock setup nginx 1.30.5
+paddock setup nginx 1.31.6
 ```
 
 Installs nginx from [nginx.org's repository](https://nginx.org/en/linux_packages.html). The
-version is one of its two channels, `stable` or `mainline`; the repository provides the latest
-release in it, and running setup with the other channel switches to it. nginx.org's packages
+version is an exact release. nginx.org publishes even minor versions (1.30) in its stable repository
+and odd ones (1.31) in mainline, keeping past releases in both; an APT pin installs exactly the one
+asked for, and running setup with another release switches to it, older or newer. nginx.org's packages
 take priority over Debian's own nginx. The default site answers on port 80. Under systemd,
 nginx is enabled and started. Wiring nginx to PHP-FPM is left to presets.
 
 ### OpenSearch
 
 ```sh
-paddock setup opensearch 3
-paddock setup opensearch 2 --heap 1g
+paddock setup opensearch 3.9.0
+paddock setup opensearch 2.19.6 --heap 1g
 ```
 
 Installs OpenSearch from [its APT repository](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/debian/).
-The version is the major (`2` or `3`); the repository provides the latest release in it.
+The version is an exact 2.x or 3.x release; the repository keeps past releases and an APT pin installs
+exactly that one. Upgrading within a major is supported; going back isn't.
 
 - Configured for local development: one node on `127.0.0.1:9200`, security plugin disabled (no
   TLS or passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
@@ -160,12 +164,14 @@ Upgrading is supported; going back to an older version isn't.
 ### PostgreSQL
 
 ```sh
-paddock setup postgres 17
-paddock setup postgres 16 --database app --username app --password secret
+paddock setup postgres 17.11
+paddock setup postgres 16.15 --database app --username app --password secret
 ```
 
 Installs PostgreSQL from [the PostgreSQL project's APT repository](https://wiki.postgresql.org/wiki/Apt)
-(PGDG). The version is a major (10 to 18 today); the repository provides the latest minor release.
+(PGDG). The version is an exact release such as 17.6. The repository and its archive
+(apt-archive.postgresql.org) keep every release, and an APT pin installs exactly that one. Upgrading
+to a newer minor is supported; going back isn't.
 
 - Several majors can be installed side by side. Each has its own `main` cluster and port: 5432 for
   the first, then 5433 and so on. The ready line prints the port.
@@ -178,13 +184,13 @@ Installs PostgreSQL from [the PostgreSQL project's APT repository](https://wiki.
 ### RabbitMQ
 
 ```sh
-paddock setup rabbitmq 4.2
-paddock setup rabbitmq 4.2 --username app --password secret --vhost app
+paddock setup rabbitmq 4.2.9
+paddock setup rabbitmq 4.2.9 --username app --password secret --vhost app
 ```
 
 Installs RabbitMQ and a matching Erlang from [Team RabbitMQ's repositories](https://www.rabbitmq.com/docs/install-debian).
-The version is a 4.x release series; an APT pin makes the repository provide its latest patch.
-Moving to a newer series upgrades; going back isn't supported. amd64 only: Team RabbitMQ
+The version is an exact 4.x release; the repository keeps past releases and an APT pin installs
+exactly that one. Upgrading is supported; going back isn't. amd64 only: Team RabbitMQ
 publishes Erlang for amd64 only, and Debian's own Erlang is too old for RabbitMQ 4.
 
 - Listens on `127.0.0.1:5672`, with the management UI on <http://localhost:15672>.
@@ -195,13 +201,13 @@ publishes Erlang for amd64 only, and Debian's own Erlang is too old for RabbitMQ
 ### Redis
 
 ```sh
-paddock setup redis 8.2
-paddock setup redis 7.4 --password secret
+paddock setup redis 8.2.10
+paddock setup redis 7.4.11 --password secret
 ```
 
 Installs Redis from [its APT repository](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/).
-The version is a release series (6.0 to 8.10 today); an APT pin makes the repository provide its
-latest patch. Moving to a newer series upgrades; going back isn't supported.
+The version is an exact release; the repository keeps past releases and an APT pin installs exactly
+that one. Upgrading is supported; going back isn't.
 
 - Listens on `127.0.0.1:6379` (the package default). `--password` sets `requirepass` in
   `/etc/redis/paddock.conf`, which includes the package's own `redis.conf`; a systemd drop-in
@@ -211,13 +217,14 @@ latest patch. Moving to a newer series upgrades; going back isn't supported.
 ### Varnish
 
 ```sh
-paddock setup varnish 8.0
-paddock setup varnish 6.0 --backend 127.0.0.1:3000 --port 6081 --memory 512m
+paddock setup varnish 8.0.2
+paddock setup varnish 6.0.18 --backend 127.0.0.1:3000 --port 6081 --memory 512m
 ```
 
 Installs Varnish Cache from [its packagecloud repositories](https://packagecloud.io/varnishcache).
-The version is a series: `6.0` (LTS), `7.6`, `7.7` or `8.0`; the repository provides its latest
-release, and running setup with another series switches to it. The repository's packages take
+The version is an exact release in a supported series: 6.0 (LTS), 7.6, 7.7 or 8.0. Each series'
+repository keeps past releases and an APT pin installs exactly the one asked for; running setup with
+another release switches to it. The repository's packages take
 priority over Debian's own Varnish.
 
 - Listens on `127.0.0.1:6081` (`--port`) and caches `--backend` (default `127.0.0.1:8080`) in
