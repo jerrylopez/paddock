@@ -55,6 +55,22 @@ The version is the major (`8` or `9`); the repository provides the latest releas
 - Switching an install to another major isn't supported, and it refuses to install next to
   OpenSearch, which uses the same port.
 
+### MariaDB
+
+```sh
+paddock setup mariadb 11.4
+paddock setup mariadb 10.11 --database app --username app --password secret
+```
+
+Installs MariaDB Server from [the MariaDB Foundation's repository](https://mariadb.org/download/).
+The version is a release series with a bookworm repository (10.11, 11.4, 11.8 and 12.3 today); the
+repository provides its latest release, and its packages take priority over Debian's own MariaDB.
+
+- Same flags as MySQL. With `--root-password`, root can log in with that password and still
+  through the Unix socket (`sudo mariadb`).
+- Under systemd it runs as the `mariadb` unit. Switching an install to another series isn't
+  supported, and MariaDB and MySQL refuse to install next to each other.
+
 ### MySQL
 
 ```sh

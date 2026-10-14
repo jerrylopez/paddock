@@ -51,6 +51,10 @@ case $arch in
   *) die "Oracle's MySQL repository has no packages for $arch" ;;
 esac
 
+# MySQL and MariaDB share files, the socket and the port.
+! package_installed mariadb-server ||
+  die "MariaDB is installed; remove it before setting up MySQL (they can't be installed together)"
+
 add_mysql_repository() {
   apt_keyring mysql "$MYSQL_KEY_URL" "$MYSQL_KEY_FINGERPRINT"
   # MySQL can't move an existing data directory to another series (e.g. 8.4 -> 8.0).

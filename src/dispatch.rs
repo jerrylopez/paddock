@@ -42,6 +42,7 @@ pub const SERVICES: &[Service] = &[
         "elasticsearch",
         "Elasticsearch search engine (single local node)"
     ),
+    service!("mariadb", "MariaDB server"),
     service!("mysql", "MySQL server"),
     service!("nginx", "nginx web server (stable or mainline)"),
     service!("opensearch", "OpenSearch search engine (single local node)"),
