@@ -141,6 +141,24 @@ Upgrading is supported; going back to an older version isn't.
 - Under systemd it runs as the `valkey-server` unit (written by Paddock), as the `valkey` user.
 - Refuses to install next to Redis, which uses the same port.
 
+### PostgreSQL
+
+```sh
+paddock setup postgres 17
+paddock setup postgres 16 --database app --username app --password secret
+```
+
+Installs PostgreSQL from [the PostgreSQL project's APT repository](https://wiki.postgresql.org/wiki/Apt)
+(PGDG). The version is a major (10 to 18 today); the repository provides the latest minor release.
+
+- Several majors can be installed side by side. Each has its own `main` cluster and port: 5432 for
+  the first, then 5433 and so on. The ready line prints the port.
+- `--database` creates a database; `--username` and `--password` create a login role, which owns
+  that database when both are given. Passwords never appear on a command line.
+- The `postgres` superuser logs in through the Unix socket: `sudo -u postgres psql`.
+- Under systemd the cluster runs as `postgresql@<major>-main`. Without systemd it's installed
+  and configured, then stopped.
+
 ### Redis
 
 ```sh
