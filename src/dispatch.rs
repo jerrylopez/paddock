@@ -49,6 +49,7 @@ pub const SERVICES: &[Service] = &[
     service!("redis", "Redis key-value store"),
     service!("typesense", "Typesense search server"),
     service!("valkey", "Valkey key-value store"),
+    service!("varnish", "Varnish HTTP cache"),
 ];
 
 pub fn service_names() -> impl Iterator<Item = &'static str> {
