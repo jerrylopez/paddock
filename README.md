@@ -71,10 +71,17 @@ The base image defaults to `debian:bookworm-slim`; override it with `PADDOCK_TES
 PADDOCK_TEST_BASE_IMAGE=ubuntu:24.04 cargo container-tests
 ```
 
-To test a service, call `harness::setup_twice_then_verify` from a test in `tests/`. It runs
-`paddock setup` twice in one container (the second run stands in for a stale snapshot) and
-then runs your verification command, e.g. `php -v | grep -q 'PHP 8.3'`. Container test
-targets need `required-features = ["container-tests"]` in `Cargo.toml`, like `container`.
+Tests live in `tests/container/`, one module per service (`php.rs`, `mysql.rs`, ...); CI runs
+each module as its own job. Run one module with `cargo container-tests -- php::`.
+
+To test a service, call `harness::setup_twice_then_verify`. It runs `paddock setup` twice in one
+container (the second run stands in for a stale snapshot, and apt is disabled during it) and
+then runs your verification command, e.g. `php -v | grep -q 'PHP 8.3'`.
+
+Plain test containers have no init system. For daemons that systemd starts, use
+`harness::SystemdContainer`: it runs systemd as PID 1, like an orb, so `systemctl enable --now`
+works, and `restart()` checks the service comes back after a reboot or orb wake. It needs
+`--privileged`, which Docker on Linux and GitHub's runners allow.
 
 In an Amp orb, Docker runs as an orb service declared in `.amp/services.yaml`; start it with
 `amp orb service ensure`.

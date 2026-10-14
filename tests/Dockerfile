@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 #
-# Image for Paddock's container tests (tests/harness). Build context is the repo root.
+# Images for Paddock's container tests (tests/container). Build context is the repo root.
 #
-# Stage 1 compiles Paddock inside the official Rust image, so the host OS doesn't matter.
-# It targets musl, giving a static binary that runs on any base image in stage 2.
-# Stage 2 is a fresh base image that receives only the binary; tests run in it.
+# `build` compiles Paddock inside the official Rust image, so the host OS doesn't matter.
+# It targets musl, giving a static binary that runs on any base image.
+# `plain` is a fresh base image that receives only the binary; most tests run in it.
+# `systemd` adds systemd as PID 1, like an orb, for tests of daemons that systemd starts.
+# It's run with extra privileges (see SystemdContainer in tests/container/harness.rs).
 
 ARG BASE_IMAGE=debian:bookworm-slim
 
@@ -16,5 +18,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release && cp target/release/paddock /paddock
 
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS systemd
+RUN apt-get update -qq \
+    && apt-get install -y -qq --no-install-recommends systemd systemd-sysv dbus >/dev/null \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /paddock /usr/local/bin/paddock
+STOPSIGNAL SIGRTMIN+3
+CMD ["/lib/systemd/systemd"]
+
+FROM ${BASE_IMAGE} AS plain
 COPY --from=build /paddock /usr/local/bin/paddock
