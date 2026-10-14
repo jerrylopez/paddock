@@ -154,3 +154,13 @@ fn varnish_rejects_bad_backends() {
         "paddock: varnish: --backend must be HOST:PORT (got 'localhost')\n"
     );
 }
+
+#[test]
+fn rabbitmq_rejects_3x_series() {
+    let output = paddock(&["setup", "rabbitmq", "3.13"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: rabbitmq: version must be a RabbitMQ 4.x series like 4.2 (got '3.13'); 3.x is out of support\n"
+    );
+}

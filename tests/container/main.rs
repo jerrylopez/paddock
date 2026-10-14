@@ -16,6 +16,7 @@ mod opensearch;
 mod php;
 mod php_fpm;
 mod postgres;
+mod rabbitmq;
 mod redis;
 mod typesense;
 mod valkey;
