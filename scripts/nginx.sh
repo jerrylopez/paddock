@@ -56,7 +56,7 @@ elif [ -n "$switching" ]; then
   info "Switching nginx to $VERSION"
   apt_update
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --allow-downgrades --no-install-recommends nginx
+    apt-get -o Acquire::Retries=3 install -y --allow-downgrades --no-install-recommends nginx
 fi
 
 quietly as_root /usr/sbin/nginx -t

@@ -55,7 +55,7 @@ if ! package_installed opensearch; then
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
     DISABLE_INSTALL_DEMO_CONFIG=true DISABLE_SECURITY_PLUGIN=true \
     OPENSEARCH_INITIAL_ADMIN_PASSWORD="Paddock-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')!" \
-    apt-get install -y --no-install-recommends opensearch
+    apt-get -o Acquire::Retries=3 install -y --no-install-recommends opensearch
 fi
 
 config="# Managed by Paddock (paddock setup opensearch): one local node for development.

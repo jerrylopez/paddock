@@ -47,7 +47,7 @@ new_binary=
 if [ ! -x "$VALKEY_HOME/$VERSION/bin/valkey-server" ]; then
   apt_install ca-certificates curl
   url=https://download.valkey.io/releases/valkey-$VERSION-jammy-$arch.tar.gz
-  curl -fsSI "$url" >/dev/null 2>&1 ||
+  curl -fsSI --retry 3 --retry-connrefused "$url" >/dev/null 2>&1 ||
     usage_error "Valkey $VERSION isn't published (no $url); see https://valkey.io/download/ for releases"
   if [ -n "$installed" ]; then
     info "Upgrading Valkey $installed to $VERSION"
@@ -55,8 +55,8 @@ if [ ! -x "$VALKEY_HOME/$VERSION/bin/valkey-server" ]; then
     info "Installing Valkey $VERSION"
   fi
   dir=$(mktemp -d)
-  quietly curl -fsSL -o "$dir/valkey.tar.gz" "$url"
-  quietly curl -fsSL -o "$dir/valkey.tar.gz.sha256" "$url.sha256"
+  download "$url" "$dir/valkey.tar.gz"
+  download "$url.sha256" "$dir/valkey.tar.gz.sha256"
   expected=$(awk '{ print $1 }' "$dir/valkey.tar.gz.sha256")
   actual=$(sha256sum "$dir/valkey.tar.gz" | awk '{ print $1 }')
   if [ "$expected" != "$actual" ]; then

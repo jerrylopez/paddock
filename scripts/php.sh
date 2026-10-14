@@ -62,7 +62,7 @@ add_sury_repository() {
     apt_install ca-certificates curl
     local deb
     deb=$(mktemp --suffix=.deb)
-    quietly curl -fsSL -o "$deb" https://packages.sury.org/debsuryorg-archive-keyring.deb
+    download https://packages.sury.org/debsuryorg-archive-keyring.deb "$deb"
     quietly as_root dpkg -i "$deb"
     rm -f "$deb"
   fi
@@ -97,8 +97,8 @@ install_composer() {
   info "Installing Composer"
   apt_install ca-certificates curl
   dir=$(mktemp -d)
-  quietly curl -fsSL -o "$dir/composer.phar" "$url"
-  quietly curl -fsSL -o "$dir/composer.phar.sha256sum" "$url.sha256sum"
+  download "$url" "$dir/composer.phar"
+  download "$url.sha256sum" "$dir/composer.phar.sha256sum"
   if ! (cd "$dir" && sha256sum --check --quiet composer.phar.sha256sum >/dev/null 2>&1); then
     rm -rf "$dir"
     die "the Composer download from $url doesn't match its checksum"

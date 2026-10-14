@@ -124,6 +124,22 @@ Upgrading is supported; going back to an older version isn't.
 - Under systemd it runs as the `valkey-server` unit (written by Paddock), as the `valkey` user.
 - Refuses to install next to Redis, which uses the same port.
 
+### Redis
+
+```sh
+paddock setup redis 8.2
+paddock setup redis 7.4 --password secret
+```
+
+Installs Redis from [its APT repository](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/).
+The version is a release series (6.0 to 8.10 today); an APT pin makes the repository provide its
+latest patch. Moving to a newer series upgrades; going back isn't supported.
+
+- Listens on `127.0.0.1:6379` (the package default). `--password` sets `requirepass` in
+  `/etc/redis/paddock.conf`, which includes the package's own `redis.conf`; a systemd drop-in
+  starts `redis-server` with it, so the package's file is never edited.
+- Refuses to install next to Valkey, which uses the same port.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):

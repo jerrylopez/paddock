@@ -148,6 +148,12 @@ require_version() {
 
 # --- System ------------------------------------------------------------------
 
+# download URL FILE: fetch URL into FILE, retrying transient network errors.
+# Exits with curl's output if it still fails.
+download() {
+  quietly curl -fsSL --retry 3 --retry-connrefused -o "$2" "$1"
+}
+
 # has_systemd: succeed if systemd manages this system (orbs, servers), as
 # opposed to a plain container.
 has_systemd() {
@@ -187,7 +193,7 @@ apt_update() {
   [ -z "$_paddock_apt_updated" ] || return 0
   # Checked here so the error isn't buried in `quietly`'s captured output.
   _paddock_require_root
-  quietly as_root apt-get update
+  quietly as_root apt-get -o Acquire::Retries=3 update
   _paddock_apt_updated=1
 }
 
@@ -217,7 +223,7 @@ apt_keyring() {
   apt_install ca-certificates curl gnupg
   local dir fingerprint expected found=()
   dir=$(mktemp -d)
-  quietly curl -fsSL -o "$dir/key" "$url"
+  download "$url" "$dir/key"
   quietly env GNUPGHOME="$dir" gpg --batch --import "$dir/key"
   mapfile -t found < <(GNUPGHOME=$dir gpg --batch --with-colons --list-keys 2>/dev/null |
     awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }')
@@ -265,5 +271,5 @@ apt_install() {
 
   apt_update
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --no-install-recommends "${missing[@]}"
+    apt-get -o Acquire::Retries=3 install -y --no-install-recommends "${missing[@]}"
 }

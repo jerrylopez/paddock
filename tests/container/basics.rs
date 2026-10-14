@@ -55,7 +55,7 @@ fn apt_source_changes_trigger_one_more_update() {
     let outcome = harness::run_service_script(
         r#"
 mkdir -p /tmp/count-bin
-printf '#!/bin/sh\necho "$1" >>/tmp/apt-calls\nexec /usr/bin/apt-get "$@"\n' >/tmp/count-bin/apt-get
+printf '#!/bin/sh\nfor arg; do case $arg in update|install) echo "$arg" >>/tmp/apt-calls; break;; esac; done\nexec /usr/bin/apt-get "$@"\n' >/tmp/count-bin/apt-get
 chmod +x /tmp/count-bin/apt-get
 export PATH="/tmp/count-bin:$PATH"
 line="deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm-backports main"
