@@ -38,6 +38,23 @@ under systemd as `php<version>-fpm`. It listens on `/run/php/php<version>-fpm.so
 ready line prints. Extensions are shared with the CLI, except the CLI-only `pcntl` and
 `readline`. Without systemd, PHP-FPM is installed and its config checked, but not started.
 
+### Elasticsearch
+
+```sh
+paddock setup elasticsearch 9
+paddock setup elasticsearch 8 --heap 1g
+```
+
+Installs Elasticsearch from [Elastic's APT repository](https://www.elastic.co/docs/deploy-manage/deploy/self-managed/install-elasticsearch-with-debian-package).
+The version is the major (`8` or `9`); the repository provides the latest release in it.
+
+- Configured for local development: one node on `127.0.0.1:9200`, security disabled (no TLS or
+  passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
+  `/etc/elasticsearch/elasticsearch.yml` and restarts Elasticsearch when it changes.
+- Under systemd, Elasticsearch is enabled and started, and setup waits until the cluster is usable.
+- Switching an install to another major isn't supported, and it refuses to install next to
+  OpenSearch, which uses the same port.
+
 ### MySQL
 
 ```sh
