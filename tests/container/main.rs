@@ -17,6 +17,7 @@ mod php;
 mod php_fpm;
 mod postgres;
 mod rabbitmq;
+mod readme;
 mod redis;
 mod typesense;
 mod valkey;

@@ -1,6 +1,115 @@
-# paddock
+# Paddock
 
-Native environment setup for Amp orbs.
+Paddock sets up services natively on Debian, one line per service, so an Amp orb (or any
+Debian 12 server) gets the same environment every time:
+
+```sh
+paddock setup php 8.4 --extensions redis
+paddock setup mysql 8.4 --database app --username app --password secret
+paddock setup redis 8.2
+```
+
+Each line installs the service from its official repository, configures it for local
+development, and, where it's a daemon, hands it to systemd so it comes back after every reboot
+or orb wake. Running a line again on a machine that's already set up changes nothing and
+finishes in a second or two.
+
+## Quick start
+
+Put this in your repository's `.agents/setup` (the script Amp runs to prepare an orb), make it
+executable with `chmod +x .agents/setup`, and commit it:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Paddock itself, pinned to one release.
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+
+# The environment this branch needs.
+paddock setup php 8.4 --extensions xdebug
+paddock setup mysql 8.4 --database app --username app --password secret
+paddock setup redis 8.2
+```
+
+Every new orb for that branch now comes up with those services installed and running.
+
+## Installing
+
+```sh
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+```
+
+Each release ships its own `install.sh`, with that release's download URL and SHA-256
+checksums written in. It installs exactly that release to `/usr/local/bin/paddock` (using
+sudo if needed; set `PADDOCK_INSTALL_DIR` to change the directory), refuses a download whose
+checksum doesn't match, and does nothing if the same binary is already there.
+
+Requirements: Debian 12 (bookworm) on x86_64 or aarch64, root or passwordless sudo, and systemd
+for services to start on their own (orbs and servers have it; plain containers don't, so
+services are installed and configured there but not left running). A few vendors don't publish
+for aarch64: MySQL and RabbitMQ are x86_64 only.
+
+## What's pinned
+
+- **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
+  with every install script built in, so `v0.1.0` always runs the same scripts. Nothing is
+  fetched at run time. Upgrading Paddock means changing that URL in a commit.
+- **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
+  PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
+  gets the current security fixes. Channel names (`stable`, `latest`) and exact patches
+  (`8.2.3`) aren't accepted.
+- **Re-runs don't upgrade.** On a machine that's already set up, a re-run installs nothing and
+  doesn't touch the network, so `.agents/setup` stays fast on an orb restored from a snapshot.
+  That orb keeps the patch it was set up with until it's set up fresh.
+- **Per branch:** `.agents/setup` lives in the repository, so each branch declares its own
+  environment. Change a version on a branch and that branch's orbs get it; merge it to share it.
+
+## Usage
+
+```sh
+paddock setup <service> <version> [flags...]
+paddock setup --help        # lists the services
+```
+
+Output is a line or two per service, for example
+`paddock: redis: Redis 8.2.10 is running on 127.0.0.1:6379`. Exit codes: 0 when the service is
+ready (or already was), 1 when something failed, 2 for a bad version or flag. A version that
+isn't available says so, and lists the available ones where the vendor publishes a list.
+
+| Service | Example | |
+|---|---|---|
+| PHP CLI + Composer | `paddock setup php 8.4 --extensions redis` | [details](#php) |
+| PHP-FPM | `paddock setup php-fpm 8.4` | [details](#php-fpm) |
+| nginx | `paddock setup nginx 1.30` | [details](#nginx) |
+| MySQL | `paddock setup mysql 8.4 --database app --username app --password secret` | [details](#mysql) |
+| MariaDB | `paddock setup mariadb 11.4 --database app --username app --password secret` | [details](#mariadb) |
+| PostgreSQL | `paddock setup postgres 17 --database app --username app --password secret` | [details](#postgresql) |
+| Redis | `paddock setup redis 8.2 --password secret` | [details](#redis) |
+| Valkey | `paddock setup valkey 9.1` | [details](#valkey) |
+| Elasticsearch | `paddock setup elasticsearch 9.5` | [details](#elasticsearch) |
+| OpenSearch | `paddock setup opensearch 3.9` | [details](#opensearch) |
+| Typesense | `paddock setup typesense 30.2 --api-key secret` | [details](#typesense) |
+| RabbitMQ | `paddock setup rabbitmq 4.2 --username app --password secret` | [details](#rabbitmq) |
+| Varnish | `paddock setup varnish 8.0 --backend 127.0.0.1:8080` | [details](#varnish) |
+
+Services listen on 127.0.0.1 and are configured for development (for example, Elasticsearch and
+OpenSearch run as a single node without TLS or passwords).
+
+## Reading the install scripts
+
+Every service is a plain bash script in [`scripts/`](scripts/), built into the binary at
+compile time, so what you read is exactly what runs:
+[php](scripts/php.sh) (also PHP-FPM), [nginx](scripts/nginx.sh), [mysql](scripts/mysql.sh),
+[mariadb](scripts/mariadb.sh), [postgres](scripts/postgres.sh), [redis](scripts/redis.sh),
+[valkey](scripts/valkey.sh), [elasticsearch](scripts/elasticsearch.sh),
+[opensearch](scripts/opensearch.sh), [typesense](scripts/typesense.sh),
+[rabbitmq](scripts/rabbitmq.sh), [varnish](scripts/varnish.sh). They share
+[`common.sh`](scripts/common.sh), and all follow the
+[install-script contract](scripts/README.md): safe to re-run, short output, release series as
+versions, sensible defaults, and a non-zero exit on failure. Signing keys are checked against
+pinned fingerprints, and downloads without an APT repository against published checksums
+where the vendor provides them.
 
 ## Services
 
