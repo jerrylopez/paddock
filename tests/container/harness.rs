@@ -80,7 +80,9 @@ pub fn run(script: &str) -> Outcome {
 }
 
 /// A container running systemd as PID 1, like an orb, so `systemctl enable
-/// --now` works. Each one is fresh; it's removed when dropped.
+/// --now` works. Like an orb, it has a `dev` user with passwordless sudo, and
+/// `setup_twice_then_verify` runs setup as that user. Each container is
+/// fresh; it's removed when dropped.
 pub struct SystemdContainer {
     id: String,
 }
@@ -129,7 +131,8 @@ impl SystemdContainer {
         self.wait_for_boot();
     }
 
-    /// `setup_twice_then_verify` in this container.
+    /// `setup_twice_then_verify` in this container, running setup as the
+    /// `dev` user (through sudo, like an orb). `verify` runs as root.
     #[track_caller]
     pub fn setup_twice_then_verify(
         &self,
@@ -138,7 +141,13 @@ impl SystemdContainer {
         flags: &[&str],
         verify: &str,
     ) -> Outcome {
-        let outcome = self.run(&setup_twice_script(service, version, flags, verify));
+        let outcome = self.run(&setup_twice_script(
+            service,
+            version,
+            flags,
+            verify,
+            Some("dev"),
+        ));
         outcome.assert_success();
         outcome
     }
@@ -205,24 +214,36 @@ pub fn setup_twice_then_verify(
     flags: &[&str],
     verify: &str,
 ) -> Outcome {
-    let outcome = run(&setup_twice_script(service, version, flags, verify));
+    let outcome = run(&setup_twice_script(service, version, flags, verify, None));
     outcome.assert_success();
     outcome
 }
 
-fn setup_twice_script(service: &str, version: &str, flags: &[&str], verify: &str) -> String {
+/// The script behind `setup_twice_then_verify`. Setup runs as `user` when
+/// given. During the second run, `apt` and `apt-get` in /usr/local/sbin fail:
+/// that's ahead of the real ones on root's PATH and on sudo's secure_path.
+fn setup_twice_script(
+    service: &str,
+    version: &str,
+    flags: &[&str],
+    verify: &str,
+    user: Option<&str>,
+) -> String {
     let mut setup = format!("paddock setup {} {}", quote(service), quote(version));
     for flag in flags {
         write!(setup, " {}", quote(flag)).unwrap();
     }
+    if let Some(user) = user {
+        setup = format!("su {user} -c {}", quote(&setup));
+    }
     format!(
         "echo '== setup (first run)'\n{setup}\n\
-         mkdir -p /tmp/paddock-no-apt\n\
          for tool in apt apt-get; do\n\
-           printf '#!/bin/sh\\necho \"$0 must not run on the second setup\" >&2\\nexit 99\\n' >/tmp/paddock-no-apt/$tool\n\
-           chmod +x /tmp/paddock-no-apt/$tool\n\
+           printf '#!/bin/sh\\necho \"$0 must not run on the second setup\" >&2\\nexit 99\\n' >/usr/local/sbin/$tool\n\
+           chmod +x /usr/local/sbin/$tool\n\
          done\n\
-         echo '== setup (second run)'\nPATH=/tmp/paddock-no-apt:$PATH {setup}\n\
+         echo '== setup (second run)'\n{setup}\n\
+         rm /usr/local/sbin/apt /usr/local/sbin/apt-get\n\
          echo '== verify'\n{verify}\n"
     )
 }

@@ -5,8 +5,9 @@
 # `build` compiles Paddock inside the official Rust image, so the host OS doesn't matter.
 # It targets musl, giving a static binary that runs on any base image.
 # `plain` is a fresh base image that receives only the binary; most tests run in it.
-# `systemd` adds systemd as PID 1, like an orb, for tests of daemons that systemd starts.
-# It's run with extra privileges (see SystemdContainer in tests/container/harness.rs).
+# `systemd` adds systemd as PID 1 and a `dev` user with passwordless sudo, like an orb,
+# for tests of daemons that systemd starts. It's run with extra privileges (see
+# SystemdContainer in tests/container/harness.rs).
 
 ARG BASE_IMAGE=debian:bookworm-slim
 
@@ -20,8 +21,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM ${BASE_IMAGE} AS systemd
 RUN apt-get update -qq \
-    && apt-get install -y -qq --no-install-recommends systemd systemd-sysv dbus >/dev/null \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y -qq --no-install-recommends systemd systemd-sysv dbus sudo >/dev/null \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash dev \
+    && echo 'dev ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/dev
 COPY --from=build /paddock /usr/local/bin/paddock
 STOPSIGNAL SIGRTMIN+3
 CMD ["/lib/systemd/systemd"]
