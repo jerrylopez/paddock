@@ -45,6 +45,7 @@ pub const SERVICES: &[Service] = &[
     service!("mysql", "MySQL server"),
     service!("nginx", "nginx web server (stable or mainline)"),
     service!("opensearch", "OpenSearch search engine (single local node)"),
+    service!("postgres", "PostgreSQL server"),
     service!("redis", "Redis key-value store"),
     service!("typesense", "Typesense search server"),
     service!("valkey", "Valkey key-value store"),

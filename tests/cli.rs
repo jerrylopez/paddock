@@ -134,3 +134,13 @@ fn opensearch_rejects_bad_heap_sizes() {
         "paddock: opensearch: --heap must be a size like 512m or 2g (got 'lots')\n"
     );
 }
+
+#[test]
+fn postgres_rejects_minor_versions() {
+    let output = paddock(&["setup", "postgres", "17.2"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: postgres: version must be a PostgreSQL major version like 17 (got '17.2')\n"
+    );
+}
