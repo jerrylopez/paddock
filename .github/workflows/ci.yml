@@ -46,11 +46,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
 
-  container:
-    name: Container tests
+  container-modules:
+    name: List container test modules
     runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.list.outputs.modules }}
+    steps:
+      - uses: actions/checkout@v5
+      # One module per service in tests/container; each gets its own job below.
+      - id: list
+        run: |
+          modules=$(find tests/container -maxdepth 1 -name '*.rs' ! -name main.rs ! -name harness.rs \
+            -exec basename {} .rs \; | sort | jq -R . | jq -sc .)
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+
+  container:
+    name: Container tests (${{ matrix.module }})
+    needs: container-modules
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.container-modules.outputs.modules) }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo container-tests --locked
+      - run: cargo container-tests --locked -- '${{ matrix.module }}::'

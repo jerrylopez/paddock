@@ -4,6 +4,9 @@
 //! brand-new container so leftover state never masks a bug. The base image
 //! defaults to Debian and can be swapped with `PADDOCK_TEST_BASE_IMAGE`.
 //!
+//! Plain containers have no init system. Tests of daemons that systemd starts
+//! use a `SystemdContainer`, which runs systemd as PID 1 like an orb.
+//!
 //! Container tests only build with the `container-tests` feature; run them
 //! with `cargo container-tests`.
 
@@ -15,6 +18,8 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::process::{Command, Output, Stdio};
 use std::sync::OnceLock;
+use std::thread::sleep;
+use std::time::Duration;
 
 const DEFAULT_BASE_IMAGE: &str = "debian:bookworm-slim";
 
@@ -70,8 +75,92 @@ impl std::fmt::Display for Outcome {
 
 /// Runs `script` with `sh -eu` in a fresh container that has `paddock` on its PATH.
 pub fn run(script: &str) -> Outcome {
-    let output = docker(&["run", "--rm", image(), "sh", "-euc", script]);
+    let output = docker(&["run", "--rm", image("plain"), "sh", "-euc", script]);
     Outcome::from_output(output)
+}
+
+/// A container running systemd as PID 1, like an orb, so `systemctl enable
+/// --now` works. Each one is fresh; it's removed when dropped.
+pub struct SystemdContainer {
+    id: String,
+}
+
+impl SystemdContainer {
+    /// Starts a container and waits for systemd to finish booting.
+    pub fn start() -> Self {
+        // systemd needs the host's cgroup tree and a writable /run.
+        let output = docker(&[
+            "run",
+            "--detach",
+            "--privileged",
+            "--cgroupns=host",
+            "--volume=/sys/fs/cgroup:/sys/fs/cgroup:rw",
+            "--tmpfs=/run",
+            "--tmpfs=/run/lock",
+            image("systemd"),
+        ]);
+        let container = Self {
+            id: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        };
+        assert!(
+            output.status.success(),
+            "starting a systemd container failed\n{}",
+            Outcome::from_output(output)
+        );
+        container.wait_for_boot();
+        container
+    }
+
+    /// Runs `script` with `sh -eu` in this container.
+    pub fn run(&self, script: &str) -> Outcome {
+        Outcome::from_output(docker(&["exec", &self.id, "sh", "-euc", script]))
+    }
+
+    /// Restarts the container, like a reboot or an orb waking up: processes
+    /// are gone and systemd starts the enabled units again.
+    pub fn restart(&self) {
+        let output = docker(&["restart", &self.id]);
+        assert!(
+            output.status.success(),
+            "restarting the container failed\n{}",
+            Outcome::from_output(output)
+        );
+        self.wait_for_boot();
+    }
+
+    /// `setup_twice_then_verify` in this container.
+    #[track_caller]
+    pub fn setup_twice_then_verify(
+        &self,
+        service: &str,
+        version: &str,
+        flags: &[&str],
+        verify: &str,
+    ) -> Outcome {
+        let outcome = self.run(&setup_twice_script(service, version, flags, verify));
+        outcome.assert_success();
+        outcome
+    }
+
+    fn wait_for_boot(&self) {
+        // `is-system-running --wait` returns once startup is done. In a
+        // container some host-only units fail, so "degraded" is fine too.
+        for _ in 0..60 {
+            let state = self.run("systemctl is-system-running --wait || true");
+            let state = state.stdout.trim();
+            if state == "running" || state == "degraded" {
+                return;
+            }
+            sleep(Duration::from_millis(500));
+        }
+        panic!("systemd didn't finish booting in the test container");
+    }
+}
+
+impl Drop for SystemdContainer {
+    fn drop(&mut self) {
+        let _ = docker(&["rm", "--force", &self.id]);
+    }
 }
 
 /// Runs `script` the way Paddock runs a service script, with `common.sh` in
@@ -82,7 +171,7 @@ pub fn run_service_script(script: &str, args: &[&str], docker_args: &[&str]) -> 
     command
         .args(["run", "--rm", "-i", "-e", "PADDOCK_SERVICE=demo"])
         .args(docker_args)
-        .args([image(), "bash", "-s", "--"])
+        .args([image("plain"), "bash", "-s", "--"])
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -115,11 +204,17 @@ pub fn setup_twice_then_verify(
     flags: &[&str],
     verify: &str,
 ) -> Outcome {
+    let outcome = run(&setup_twice_script(service, version, flags, verify));
+    outcome.assert_success();
+    outcome
+}
+
+fn setup_twice_script(service: &str, version: &str, flags: &[&str], verify: &str) -> String {
     let mut setup = format!("paddock setup {} {}", quote(service), quote(version));
     for flag in flags {
         write!(setup, " {}", quote(flag)).unwrap();
     }
-    let script = format!(
+    format!(
         "echo '== setup (first run)'\n{setup}\n\
          mkdir -p /tmp/paddock-no-apt\n\
          for tool in apt apt-get; do\n\
@@ -128,24 +223,32 @@ pub fn setup_twice_then_verify(
          done\n\
          echo '== setup (second run)'\nPATH=/tmp/paddock-no-apt:$PATH {setup}\n\
          echo '== verify'\n{verify}\n"
-    );
-    let outcome = run(&script);
-    outcome.assert_success();
-    outcome
+    )
 }
 
-/// Name of the test image, building it on first use.
-fn image() -> &'static str {
-    static IMAGE: OnceLock<String> = OnceLock::new();
-    IMAGE.get_or_init(|| {
+/// Name of the `plain` or `systemd` test image, building it on first use.
+fn image(target: &'static str) -> &'static str {
+    static PLAIN: OnceLock<String> = OnceLock::new();
+    static SYSTEMD: OnceLock<String> = OnceLock::new();
+    let cell = match target {
+        "plain" => &PLAIN,
+        "systemd" => &SYSTEMD,
+        _ => unreachable!("unknown image target {target}"),
+    };
+    cell.get_or_init(|| {
         let base =
             env::var("PADDOCK_TEST_BASE_IMAGE").unwrap_or_else(|_| DEFAULT_BASE_IMAGE.into());
-        let tag = format!("paddock-test:{}", base.replace([':', '/', '@'], "-"));
+        let tag = format!(
+            "paddock-test-{target}:{}",
+            base.replace([':', '/', '@'], "-")
+        );
         let output = docker(&[
             "build",
             "--quiet",
             "--file",
             concat!(env!("CARGO_MANIFEST_DIR"), "/tests/Dockerfile"),
+            "--target",
+            target,
             "--build-arg",
             &format!("BASE_IMAGE={base}"),
             "--tag",
@@ -154,7 +257,7 @@ fn image() -> &'static str {
         ]);
         assert!(
             output.status.success(),
-            "building the test image from {base} failed\n{}",
+            "building the {target} test image from {base} failed\n{}",
             Outcome::from_output(output)
         );
         tag
