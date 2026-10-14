@@ -93,6 +93,7 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `as_root CMD...` | Runs CMD as root, through `sudo` when needed |
 | `apt_install PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing |
 | `apt_update` | Refreshes package lists, at most once per setup unless `apt_source` changed a source |
+| `write_file PATH CONTENT` | Makes PATH contain CONTENT, writing as root only if it differs; sets `WROTE=1` if it wrote |
 | `apt_keyring NAME URL FPR...` | Installs the signing keys at URL as `/etc/apt/keyrings/NAME.gpg`, refusing them unless every fingerprint is listed |
 | `apt_source NAME LINE` | Makes `/etc/apt/sources.list.d/NAME.list` contain LINE; if that changes it, lists are refreshed again |
 | `package_installed PKG` | Succeeds if the Debian package is installed |

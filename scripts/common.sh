@@ -191,6 +191,19 @@ apt_update() {
   _paddock_apt_updated=1
 }
 
+# write_file PATH CONTENT: make PATH contain CONTENT (plus a final newline),
+# writing as root only if it differs. Sets WROTE=1 if it wrote, else WROTE=.
+write_file() {
+  WROTE=
+  if [ -f "$1" ] && [ "$(cat "$1")" = "$2" ]; then
+    return 0
+  fi
+  _paddock_require_root
+  as_root mkdir -p "$(dirname "$1")"
+  printf '%s\n' "$2" | as_root tee "$1" >/dev/null
+  WROTE=1
+}
+
 # apt_keyring NAME URL FINGERPRINT...: install the signing keys published at
 # URL as /etc/apt/keyrings/NAME.gpg, for `signed-by=` in an `apt_source` line.
 # Refuses them unless every key's fingerprint is one of those listed. Does
