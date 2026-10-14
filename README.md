@@ -175,6 +175,23 @@ Installs PostgreSQL from [the PostgreSQL project's APT repository](https://wiki.
 - Under systemd the cluster runs as `postgresql@<major>-main`. Without systemd it's installed
   and configured, then stopped.
 
+### RabbitMQ
+
+```sh
+paddock setup rabbitmq 4.2
+paddock setup rabbitmq 4.2 --username app --password secret --vhost app
+```
+
+Installs RabbitMQ and a matching Erlang from [Team RabbitMQ's repositories](https://www.rabbitmq.com/docs/install-debian).
+The version is a 4.x release series; an APT pin makes the repository provide its latest patch.
+Moving to a newer series upgrades; going back isn't supported. amd64 only: Team RabbitMQ
+publishes Erlang for amd64 only, and Debian's own Erlang is too old for RabbitMQ 4.
+
+- Listens on `127.0.0.1:5672`, with the management UI on <http://localhost:15672>.
+- `--username` and `--password` create an administrator; `--vhost` creates a virtual host the
+  user gets full access to (otherwise the default `/`). Passwords never appear on a command line.
+  The default `guest` user stays, limited to localhost.
+
 ### Redis
 
 ```sh
