@@ -9,6 +9,7 @@ mod harness;
 
 mod basics;
 mod elasticsearch;
+mod mariadb;
 mod mysql;
 mod nginx;
 mod opensearch;
