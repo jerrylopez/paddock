@@ -52,12 +52,12 @@ happened, and nothing else.
   if they fail.
 - `PADDOCK_VERBOSE=1 paddock setup ...` shows everything, for debugging.
 
-### 3. Versions are exact releases
+### 3. Versions are release series
 
-The version is an exact release (`nginx 1.30.5`, `redis 8.2.3`), never a channel (`stable`) or a
-series (`8.2`), so a setup line installs the same thing every time. Pin it with `apt_pin`, check it
-with `require_published`, and prefer sources that keep past releases (or their archives) so the pin
-keeps working after upstream ships the next one.
+The version is a release series (`nginx 1.30`, `redis 8.2`, `php 8.3`; for PostgreSQL its major,
+`17`), never a channel name (`stable`) or an exact release (`8.2.3`). Setup installs the latest
+patch in it, so new installs always get the current security fixes. Pin the series with `apt_pin`
+and check it with `require_series`.
 
 ### 4. Flags have sensible defaults
 
@@ -99,9 +99,10 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `quietly CMD...` | Runs CMD silently; on failure prints its output and exits with its status |
 | `download URL FILE` | Fetches URL into FILE with `curl`, retrying transient network errors |
 | `as_root CMD...` | Runs CMD as root, through `sudo` when needed |
-| `apt_pin NAME VERSION PKG...` | Pins PKGs to an exact VERSION pattern (e.g. `1.30.5-*`) at priority 1001 |
-| `installed_version PKG` | PKG's installed upstream version (`8.2.3`, without epoch or Debian revision), or nothing |
-| `require_published PKG LABEL` | Usage error unless `$VERSION` is published for PKG; lists nearby releases |
+| `apt_pin NAME VERSION PKG...` | Pins PKGs to a version pattern (e.g. `1.30.*`) at priority 1001, over newer series and Debian's own packages |
+| `installed_version PKG` | PKG's installed upstream version (`8.2.10`, without epoch or Debian revision), or nothing |
+| `installed_series PKG [PARTS]` | The first PARTS (default 2) parts of that version: `8.2` |
+| `require_series PKG LABEL` | Usage error unless a release of PKG in the `$VERSION` series is published; lists the series |
 | `apt_install PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing |
 | `apt_update` | Refreshes package lists, at most once per setup unless `apt_source` changed a source |
 | `write_file PATH CONTENT` | Makes PATH contain CONTENT, writing as root only if it differs; sets `WROTE=1` if it wrote |
@@ -122,27 +123,21 @@ Pitfalls:
 ## Template
 
 ```bash
-# example.sh: installs Example from its APT repository.
+# example.sh: installs Example.
 # Usage (via Paddock): paddock setup example <version> [flags...]
 
 option port 8080
 parse_args "$@"
-[[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be an Example release like 2.1.0 (got '$VERSION')"
+require_version 1.0 2.0
 
-apt_keyring example https://example.org/key.asc 0123456789ABCDEF0123456789ABCDEF01234567
-apt_source example "deb [signed-by=/etc/apt/keyrings/example.gpg] https://example.org/apt stable main"
-apt_pin example "$VERSION-*" example
-
-if [ "$(installed_version example)" != "$VERSION" ]; then
-  apt_update
-  require_published example Example
+if has_command example && [ "$(example --version)" = "$VERSION" ]; then
+  info "Example $VERSION is already installed"
+else
   info "Installing Example $VERSION"
-  quietly as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades example
+  apt_install "example-$VERSION"
 fi
 
 as_root example configure --port "$port"
-info "Example $VERSION is ready on port $port"
 ```
 
 Then register it in `SERVICES` in `src/dispatch.rs`: `service!("example", "Example server")`.

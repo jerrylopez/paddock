@@ -261,8 +261,9 @@ apt_source() {
 }
 
 # apt_pin NAME VERSION PACKAGE...: pin PACKAGEs to VERSION (an APT version
-# pattern such as 1.30.5-*) in /etc/apt/preferences.d/NAME. The priority is
-# above 1000, so apt installs exactly that version even over a newer one.
+# pattern such as 1.30.*) in /etc/apt/preferences.d/NAME. The priority is
+# above 1000, so apt picks the newest matching release even over newer series
+# or Debian's own packages.
 # Sets WROTE like write_file.
 apt_pin() {
   local name=$1 version=$2
@@ -284,17 +285,25 @@ installed_version() {
   dpkg-query -W -f='${Version}' "$1" | _paddock_upstream_version
 }
 
-# require_published PACKAGE LABEL: usage error unless $VERSION is a version of
-# PACKAGE the configured sources offer. Lists releases near the requested one.
-# Call `apt_update` first.
-require_published() {
-  local versions prefix nearby
+# installed_series PACKAGE [PARTS]: the first PARTS (default 2) components of
+# PACKAGE's installed upstream version, e.g. 8.2 from 8.2.10; nothing if it
+# isn't installed.
+installed_series() {
+  local version
+  version=$(installed_version "$1")
+  [ -z "$version" ] || cut -d. -f1-"${2:-2}" <<<"$version"
+}
+
+# require_series PACKAGE LABEL: usage error unless the configured sources offer
+# a release of PACKAGE in the $VERSION series (8.2 accepts 8.2.x, 17 accepts
+# 17.x). Lists the available series. Call `apt_update` first.
+require_series() {
+  local versions parts series
   versions=$(apt-cache madison "$1" | awk '{ print $3 }' | _paddock_upstream_version | sort -uV)
-  grep -qxF "$VERSION" <<<"$versions" && return 0
-  prefix=${VERSION%.*}
-  nearby=$(grep -E "^${prefix//./\\.}\\." <<<"$versions" | tail -n 8 | paste -sd ' ') || true
-  [ -n "$nearby" ] || nearby=$(tail -n 8 <<<"$versions" | paste -sd ' ')
-  usage_error "$2 $VERSION isn't published (available: ${nearby:-none})"
+  grep -q "^${VERSION//./\\.}\\." <<<"$versions" && return 0
+  parts=$(($(tr -cd . <<<"$VERSION" | wc -c) + 1))
+  series=$(cut -d. -f1-"$parts" <<<"$versions" | sort -uV | paste -sd ' ') || true
+  usage_error "$2 $VERSION isn't available (available: ${series:-none})"
 }
 
 # apt_install PACKAGE...: install the packages that aren't installed yet.

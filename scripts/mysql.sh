@@ -1,7 +1,7 @@
 # mysql.sh: installs MySQL Community Server from Oracle's APT repository.
 # Usage (via Paddock): paddock setup mysql <version> [flags...]
 #
-# <version> picks a release series: 8.0, 8.4, 9.7 or innovation. The repository
+# <version> picks a release series: 8.0, 8.4 or 9.7. The repository
 # provides the latest release in it.
 #
 #   --database NAME       create a database
@@ -30,8 +30,7 @@ case $VERSION in
   8.0) suite=mysql-8.0 ;;
   8.4) suite=mysql-8.4-lts ;;
   9.7) suite=mysql-9.7-lts ;;
-  innovation) suite=mysql-innovation ;;
-  *) require_version 8.0 8.4 9.7 innovation ;;
+  *) require_version 8.0 8.4 9.7 ;;
 esac
 
 [ -z "$database" ] || [[ $database =~ ^[A-Za-z0-9_]+$ ]] ||

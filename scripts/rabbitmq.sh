@@ -1,9 +1,9 @@
 # rabbitmq.sh: installs RabbitMQ and a matching Erlang from Team RabbitMQ's APT repositories.
-# Usage (via Paddock): paddock setup rabbitmq <version> [flags...]
+# Usage (via Paddock): paddock setup rabbitmq <major.minor> [flags...]
 #
-# <version> is an exact RabbitMQ 4.x release such as 4.2.9; the repository
-# keeps past releases and an APT pin installs exactly that one. Upgrading is
-# supported; going back isn't. Team RabbitMQ publishes Erlang for amd64 only,
+# <major.minor> is a RabbitMQ 4.x release series such as 4.2; an APT pin
+# installs the latest patch in it. Moving to a newer series upgrades; going
+# back isn't supported. Team RabbitMQ publishes Erlang for amd64 only,
 # and Debian's own Erlang is too old for RabbitMQ 4, so other architectures
 # aren't supported.
 #
@@ -27,8 +27,8 @@ option password ""
 option vhost ""
 parse_args "$@"
 
-[[ $VERSION =~ ^4\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be a RabbitMQ 4.x release like 4.2.9 (got '$VERSION'); 3.x is out of support"
+[[ $VERSION =~ ^4\.[0-9]+$ ]] ||
+  usage_error "version must be a RabbitMQ 4.x series like 4.2 (got '$VERSION'); 3.x is out of support"
 [ -z "$username" ] || [[ $username =~ ^[A-Za-z0-9_.-]+$ ]] ||
   usage_error "username may only use letters, digits, _, . and - (got '$username')"
 [ -z "$vhost" ] || [[ $vhost =~ ^[A-Za-z0-9_.-]+$ ]] ||
@@ -44,7 +44,7 @@ arch=$(dpkg --print-architecture)
 [ "$arch" = amd64 ] ||
   die "Team RabbitMQ publishes Erlang for amd64 only, and Debian's Erlang is too old for RabbitMQ 4 ($arch isn't supported)"
 
-installed=$(installed_version rabbitmq-server)
+installed=$(installed_series rabbitmq-server)
 if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
   dpkg --compare-versions "$VERSION" lt "$installed"; then
   die "RabbitMQ $installed is installed; going back to $VERSION isn't supported"
@@ -54,19 +54,19 @@ apt_keyring rabbitmq "$RABBITMQ_KEY_URL" "$RABBITMQ_KEY_FINGERPRINT"
 repo="[signed-by=/etc/apt/keyrings/rabbitmq.gpg] https://deb1.rabbitmq.com"
 apt_source rabbitmq "deb $repo/rabbitmq-erlang/debian/$codename $codename main
 deb $repo/rabbitmq-server/debian/$codename $codename main"
-# Erlang from Team RabbitMQ rather than Debian, and exactly this release.
+# Erlang from Team RabbitMQ rather than Debian, and the latest release in this series.
 write_file "$RABBITMQ_PIN" "Package: erlang*
 Pin: origin deb1.rabbitmq.com
 Pin-Priority: 1001
 
 Package: rabbitmq-server
-Pin: version $VERSION-*
+Pin: version $VERSION.*
 Pin-Priority: 1001"
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_published rabbitmq-server RabbitMQ
+  require_series rabbitmq-server RabbitMQ
   if [ -n "$installed" ]; then
     info "Upgrading RabbitMQ $installed to $VERSION"
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
@@ -142,8 +142,8 @@ details=("management UI on http://localhost:15672")
 summary=" ($(IFS=,; echo "${details[*]}" | sed 's/,/, /g'))"
 
 if has_systemd; then
-  info "RabbitMQ $VERSION is running on 127.0.0.1:5672$summary"
+  info "RabbitMQ $(installed_version rabbitmq-server) is running on 127.0.0.1:5672$summary"
 else
-  info "RabbitMQ $VERSION is installed$summary"
+  info "RabbitMQ $(installed_version rabbitmq-server) is installed$summary"
   warn "systemd isn't running, so RabbitMQ won't start on its own; start it with: sudo rabbitmq-server -detached"
 fi

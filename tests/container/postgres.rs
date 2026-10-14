@@ -11,7 +11,7 @@ fn creates_database_and_user_under_systemd_and_survives_a_restart() {
     let container = harness::SystemdContainer::start();
     let outcome = container.setup_twice_then_verify(
         "postgres",
-        "17.10",
+        "17",
         &[
             "--database",
             "app",
@@ -24,13 +24,13 @@ fn creates_database_and_user_under_systemd_and_survives_a_restart() {
     );
     assert_eq!(
         outcome.section("setup (first run)").lines().next(),
-        Some("paddock: postgres: Installing PostgreSQL 17.10"),
+        Some("paddock: postgres: Installing PostgreSQL 17"),
         "\n{outcome}"
     );
     let rerun: Vec<_> = outcome.section("setup (second run)").lines().collect();
     assert_eq!(rerun.len(), 1, "rerun should print one line\n{outcome}");
     assert!(
-        rerun[0].starts_with("paddock: postgres: PostgreSQL 17.10 ")
+        rerun[0].starts_with("paddock: postgres: PostgreSQL 17.")
             && rerun[0].ends_with(" is running on port 5432 (database: app, user: app)"),
         "\n{outcome}"
     );
@@ -49,28 +49,28 @@ fn creates_database_and_user_under_systemd_and_survives_a_restart() {
 }
 
 #[test]
-fn installs_archived_releases_side_by_side_without_systemd() {
+fn installs_majors_side_by_side_without_systemd() {
     let outcome = harness::run(&format!(
-        "paddock setup postgres 16.12 --database app --username app --password \"it's secret\"\n\
-         paddock setup postgres 17.6\n\
+        "paddock setup postgres 16 --database app --username app --password \"it's secret\"\n\
+         paddock setup postgres 17\n\
          pg_ctlcluster 16 main start\n\
          {CONNECT}\n\
-         paddock setup postgres 17.99 || echo \"exit=$?\""
+         paddock setup postgres 9 || echo \"exit=$?\""
     ));
     outcome.assert_success();
     let lines: Vec<_> = outcome.stdout.lines().collect();
     assert!(
-        lines.iter().any(
-            |line| line.starts_with("paddock: postgres: PostgreSQL 16.12 ")
-                && line.ends_with(" is installed on port 5432 (database: app, user: app)")
-        ),
+        lines
+            .iter()
+            .any(|line| line.starts_with("paddock: postgres: PostgreSQL 16.")
+                && line.ends_with(" is installed on port 5432 (database: app, user: app)")),
         "\n{outcome}"
     );
     assert!(
-        lines.iter().any(
-            |line| line.starts_with("paddock: postgres: PostgreSQL 17.6 ")
-                && line.ends_with(" is installed on port 5433")
-        ),
+        lines
+            .iter()
+            .any(|line| line.starts_with("paddock: postgres: PostgreSQL 17.")
+                && line.ends_with(" is installed on port 5433")),
         "\n{outcome}"
     );
     assert_eq!(
@@ -81,7 +81,7 @@ fn installs_archived_releases_side_by_side_without_systemd() {
     assert!(
         outcome
             .stderr
-            .contains("paddock: postgres: PostgreSQL 17.99 isn't published (available: 17."),
+            .contains("paddock: postgres: PostgreSQL 9 isn't available (available: "),
         "\n{outcome}"
     );
 }

@@ -1,11 +1,10 @@
 # postgres.sh: installs PostgreSQL from the PostgreSQL project's APT repository (PGDG).
-# Usage (via Paddock): paddock setup postgres <version> [flags...]
+# Usage (via Paddock): paddock setup postgres <major> [flags...]
 #
-# <version> is an exact PostgreSQL release such as 17.6. The repository and
-# its archive (apt-archive.postgresql.org) keep every release, and an APT pin
-# installs exactly that one. Upgrading to a newer minor is supported; going
-# back isn't. Several majors can be installed side by side: each has its own
-# `main` cluster, and Debian gives each a port (5432 for the first).
+# <major> is a PostgreSQL major version such as 17; the latest minor release
+# (PostgreSQL's security and bug-fix releases) is installed. Several majors can
+# be installed side by side: each has its own `main` cluster, and Debian gives
+# each a port (5432 for the first).
 #
 #   --database NAME       create a database
 #   --username NAME       create a login role (needs --password); with
@@ -25,9 +24,9 @@ option username ""
 option password ""
 parse_args "$@"
 
-[[ $VERSION =~ ^([0-9]+)\.[0-9]+$ ]] ||
-  usage_error "version must be a PostgreSQL release like 17.6 (got '$VERSION')"
-major=${BASH_REMATCH[1]}
+[[ $VERSION =~ ^[0-9]+$ ]] ||
+  usage_error "version must be a PostgreSQL major version like 17 (got '$VERSION')"
+major=$VERSION
 [ -z "$database" ] || [[ $database =~ ^[a-z_][a-z0-9_]*$ ]] ||
   usage_error "database name may only use lowercase letters, digits and _ (got '$database')"
 [ -z "$username" ] || [[ $username =~ ^[a-z_][a-z0-9_]*$ ]] ||
@@ -44,31 +43,19 @@ case $(dpkg --print-architecture) in
   *) die "the PostgreSQL repository has no packages for $(dpkg --print-architecture)" ;;
 esac
 
-installed=$(installed_version "postgresql-$major")
-if [ -n "$installed" ] && [ "$installed" != "$VERSION" ] &&
-  dpkg --compare-versions "$VERSION" lt "$installed"; then
-  die "PostgreSQL $installed is installed; going back to $VERSION isn't supported"
-fi
-
 apt_keyring postgresql "$PGDG_KEY_URL" "$PGDG_KEY_FINGERPRINT"
-# The main repository has the latest minors; the archive has every release.
-apt_source postgresql "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $codename-pgdg main
-deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt-archive.postgresql.org/pub/repos/apt $codename-pgdg-archive main"
-apt_pin "postgresql-$major" "$VERSION-*" "postgresql-$major" "postgresql-client-$major"
+apt_source postgresql "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt $codename-pgdg main"
 
-upgraded=
-if [ "$installed" != "$VERSION" ]; then
+available_majors() {
+  apt-cache pkgnames postgresql- | sed -nE 's/^postgresql-([0-9]+)$/\1/p' | sort -n | paste -sd ' '
+}
+
+if ! package_installed "postgresql-$major"; then
   apt_update
-  require_published "postgresql-$major" PostgreSQL
-  if [ -n "$installed" ]; then
-    info "Upgrading PostgreSQL $installed to $VERSION"
-    quietly as_root env DEBIAN_FRONTEND=noninteractive \
-      apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "postgresql-$major" "postgresql-client-$major"
-    upgraded=1
-  else
-    info "Installing PostgreSQL $VERSION"
-    apt_install "postgresql-$major"
-  fi
+  apt-cache show "postgresql-$major" >/dev/null 2>&1 ||
+    usage_error "PostgreSQL $major isn't available (available: $(available_majors))"
+  info "Installing PostgreSQL $major"
+  apt_install "postgresql-$major"
 fi
 
 # Installing the package creates the `main` cluster; recreate it if it's gone.
@@ -92,12 +79,7 @@ wait_until_ready() {
 
 temporary=
 if has_systemd; then
-  was_running=$(systemctl is-active "postgresql@$major-main" 2>/dev/null) || true
   quietly as_root systemctl enable --now "postgresql@$major-main"
-  # Pick up the new binaries after an upgrade.
-  if [ "$was_running" = active ] && [ -n "$upgraded" ]; then
-    quietly as_root systemctl restart "postgresql@$major-main"
-  fi
   wait_until_ready
 elif [ -n "$database$username" ] && ! running; then
   # No systemd: start the cluster just long enough to apply the flags.

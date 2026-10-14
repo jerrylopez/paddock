@@ -1,9 +1,9 @@
 # elasticsearch.sh: installs Elasticsearch from Elastic's official APT repository.
-# Usage (via Paddock): paddock setup elasticsearch <version> [--heap SIZE]
+# Usage (via Paddock): paddock setup elasticsearch <major.minor> [--heap SIZE]
 #
-# <version> is an exact Elasticsearch 8 or 9 release such as 9.5.5; Elastic's
-# repository keeps past releases and an APT pin installs exactly that one.
-# Upgrading within a major is supported; going back or to another major isn't.
+# <major.minor> is an Elasticsearch 8.x or 9.x release series such as 9.5;
+# an APT pin installs the latest patch in it. Moving to a newer series within
+# a major upgrades; going back or to another major isn't supported.
 # Configured for local development: one node on 127.0.0.1:9200 with security
 # disabled (no TLS, no passwords), and a small JVM heap (--heap, default
 # 512m). Under systemd, Elasticsearch is enabled and started.
@@ -17,12 +17,12 @@ ELASTIC_URL=http://127.0.0.1:9200
 option heap 512m
 parse_args "$@"
 
-[[ $VERSION =~ ^([0-9]+)\.[0-9]+\.[0-9]+$ ]] ||
-  usage_error "version must be an Elasticsearch release like 9.5.5 (got '$VERSION')"
+[[ $VERSION =~ ^([0-9]+)\.[0-9]+$ ]] ||
+  usage_error "version must be an Elasticsearch series like 9.5 (got '$VERSION')"
 major=${BASH_REMATCH[1]}
 case $major in
   8 | 9) ;;
-  *) usage_error "Elasticsearch $VERSION isn't supported; use an 8.x or 9.x release" ;;
+  *) usage_error "Elasticsearch $VERSION isn't supported; use an 8.x or 9.x series" ;;
 esac
 [[ $heap =~ ^[0-9]+[mg]$ ]] || usage_error "--heap must be a size like 512m or 2g (got '$heap')"
 
@@ -38,7 +38,7 @@ esac
 ! package_installed opensearch ||
   die "OpenSearch is installed and uses the same port; remove it before setting up Elasticsearch"
 
-installed=$(installed_version elasticsearch)
+installed=$(installed_series elasticsearch)
 if [ -n "$installed" ] && [ "${installed%%.*}" != "$major" ]; then
   die "Elasticsearch $installed is installed; switching to another major version isn't supported (remove the elasticsearch package and /var/lib/elasticsearch first)"
 fi
@@ -49,12 +49,12 @@ fi
 
 apt_keyring elasticsearch "$ELASTIC_KEY_URL" "$ELASTIC_KEY_FINGERPRINT"
 apt_source elasticsearch "deb [signed-by=/etc/apt/keyrings/elasticsearch.gpg] https://artifacts.elastic.co/packages/$major.x/apt stable main"
-apt_pin elasticsearch "$VERSION" elasticsearch
+apt_pin elasticsearch "$VERSION.*" elasticsearch
 
 upgraded=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_published elasticsearch Elasticsearch
+  require_series elasticsearch Elasticsearch
   if [ -n "$installed" ]; then
     info "Upgrading Elasticsearch $installed to $VERSION"
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
@@ -112,8 +112,8 @@ if has_systemd; then
     quietly as_root systemctl restart elasticsearch
   fi
   wait_until_ready
-  info "Elasticsearch $VERSION is running on http://localhost:9200 (heap $heap, security disabled)"
+  info "Elasticsearch $(installed_version elasticsearch) is running on http://localhost:9200 (heap $heap, security disabled)"
 else
-  info "Elasticsearch $VERSION is installed (heap $heap, security disabled)"
+  info "Elasticsearch $(installed_version elasticsearch) is installed (heap $heap, security disabled)"
   warn "systemd isn't running, so Elasticsearch won't start on its own"
 fi
