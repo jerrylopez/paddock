@@ -14,3 +14,4 @@ mod opensearch;
 mod php;
 mod php_fpm;
 mod typesense;
+mod valkey;

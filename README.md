@@ -107,6 +107,23 @@ back to an older version isn't.
 - Typesense publishes no checksums, so the download is trusted on HTTPS from dl.typesense.org,
   as in its own install instructions.
 
+### Valkey
+
+```sh
+paddock setup valkey 9.1.2
+paddock setup valkey 9.1.2 --password secret
+```
+
+Installs Valkey from [its official release builds](https://valkey.io/download/), checked against
+their published SHA-256. Valkey publishes no Debian repository (bookworm-backports only has 8.0.1),
+so the version is an exact release and the Ubuntu 22.04 build is used, which runs on Debian 12.
+Upgrading is supported; going back to an older version isn't.
+
+- Installed under `/opt/valkey/<version>`, with the commands linked into `/usr/local/bin`.
+- Listens on `127.0.0.1:6379`; `--password` sets `requirepass`. Config: `/etc/valkey/valkey.conf`.
+- Under systemd it runs as the `valkey-server` unit (written by Paddock), as the `valkey` user.
+- Refuses to install next to Redis, which uses the same port.
+
 ## Adding a service
 
 1. Write `scripts/<name>.sh` following the [install-script contract](scripts/README.md):
@@ -139,8 +156,9 @@ container (the second run stands in for a stale snapshot, and apt is disabled du
 then runs your verification command, e.g. `php -v | grep -q 'PHP 8.3'`.
 
 Plain test containers have no init system. For daemons that systemd starts, use
-`harness::SystemdContainer`: it runs systemd as PID 1, like an orb, so `systemctl enable --now`
-works, and `restart()` checks the service comes back after a reboot or orb wake. It needs
+`harness::SystemdContainer`: it runs systemd as PID 1 and has a `dev` user with passwordless sudo,
+like an orb. Its `setup_twice_then_verify` runs setup as `dev`, so problems that only show up
+through sudo are caught, and `restart()` checks the service comes back after a reboot or orb wake. It needs
 `--privileged`, which Docker on Linux and GitHub's runners allow.
 
 In an Amp orb, Docker runs as an orb service declared in `.amp/services.yaml`; start it with

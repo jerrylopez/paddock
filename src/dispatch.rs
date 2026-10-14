@@ -42,6 +42,7 @@ pub const SERVICES: &[Service] = &[
     service!("nginx", "nginx web server (stable or mainline)"),
     service!("opensearch", "OpenSearch search engine (single local node)"),
     service!("typesense", "Typesense search server"),
+    service!("valkey", "Valkey key-value store"),
 ];
 
 pub fn service_names() -> impl Iterator<Item = &'static str> {
