@@ -24,7 +24,7 @@ executable with `chmod +x .agents/setup`, and commit it:
 set -euo pipefail
 
 # Paddock itself, pinned to one release.
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
 
 # The environment this branch needs.
 paddock setup php 8.4 --extensions xdebug
@@ -37,7 +37,7 @@ Every new orb for that branch now comes up with those services installed and run
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
 ```
 
 Each release ships its own `install.sh`, with that release's download URL and SHA-256
@@ -53,7 +53,7 @@ for aarch64: MySQL and RabbitMQ are x86_64 only.
 ## What's pinned
 
 - **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
-  with every install script built in, so `v0.1.0` always runs the same scripts. Nothing is
+  with every install script built in, so `v0.2.0` always runs the same scripts. Nothing is
   fetched at run time. Upgrading Paddock means changing that URL in a commit.
 - **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
   PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
