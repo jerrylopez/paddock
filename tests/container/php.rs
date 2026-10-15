@@ -49,6 +49,48 @@ fn installs_with_default_extensions_and_reruns_cleanly() {
 }
 
 #[test]
+fn pins_composer_to_a_series_and_switches_it() {
+    let outcome = harness::setup_twice_then_verify(
+        "php",
+        "8.3",
+        &["--composer", "2.2"],
+        "COMPOSER_ALLOW_SUPERUSER=1 composer --version --no-ansi | cut -d' ' -f1-3\n\
+         paddock setup php 8.3 --composer 2.8\n\
+         paddock setup php 8.3\n\
+         paddock setup php 8.3 --composer 9.9 2>&1 || echo \"exit $?\"",
+    );
+    let first: Vec<_> = outcome.section("setup (first run)").lines().collect();
+    assert_eq!(
+        first[1], "paddock: php: Installing Composer 2.2",
+        "\n{outcome}"
+    );
+    let rerun: Vec<_> = outcome.section("setup (second run)").lines().collect();
+    assert_eq!(rerun.len(), 1, "rerun should print one line\n{outcome}");
+    assert!(rerun[0].contains(" and Composer 2.2."), "\n{outcome}");
+    let verify: Vec<_> = outcome.section("verify").lines().collect();
+    assert!(
+        verify[0].starts_with("Composer version 2.2."),
+        "\n{outcome}"
+    );
+    assert_eq!(
+        verify[1], "paddock: php: Switching Composer 2.2 to 2.8",
+        "\n{outcome}"
+    );
+    // Without --composer, the pinned 2.8 stays.
+    assert!(
+        verify[2].contains(" and Composer 2.8.") && verify[3].contains(" and Composer 2.8."),
+        "\n{outcome}"
+    );
+    // An unknown series fails before any progress line.
+    assert!(
+        verify[4].starts_with("paddock: php: Composer 9.9 isn't available (available: 1.0 ")
+            && verify[4].contains(" 2.8 "),
+        "\n{outcome}"
+    );
+    assert_eq!(verify[5..], ["exit 2"], "\n{outcome}");
+}
+
+#[test]
 fn adds_extensions_and_switches_versions() {
     let outcome = harness::run(
         "paddock setup php 8.4 --extensions redis,pdo_mysql\n\

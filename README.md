@@ -24,7 +24,7 @@ executable with `chmod +x .agents/setup`, and commit it:
 set -euo pipefail
 
 # Paddock itself, pinned to one release.
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
 
 # The environment this branch needs.
 paddock setup php 8.4 --extensions xdebug
@@ -37,7 +37,7 @@ Every new orb for that branch now comes up with those services installed and run
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
 ```
 
 Each release ships its own `install.sh`, with that release's download URL and SHA-256
@@ -53,7 +53,7 @@ for aarch64: MySQL and RabbitMQ are x86_64 only.
 ## What's pinned
 
 - **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
-  with every install script built in, so `v0.2.0` always runs the same scripts. Nothing is
+  with every install script built in, so `v0.3.0` always runs the same scripts. Nothing is
   fetched at run time. Upgrading Paddock means changing that URL in a commit.
 - **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
   PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
@@ -117,7 +117,7 @@ where the vendor provides them.
 
 ```sh
 paddock setup php 8.3
-paddock setup php 8.4 --extensions redis,pdo_mysql
+paddock setup php 8.4 --extensions redis,pdo_mysql --composer 2.8
 ```
 
 Installs the PHP CLI on Debian from [packages.sury.org](https://packages.sury.org/php/), Ondřej
@@ -133,6 +133,10 @@ Surý's repository (the Debian counterpart of his Ubuntu PPA), and
   this way must be available.
 - Composer is the latest 2.x release, or the 2.2 LTS line for PHP older than 7.2.5. Its download
   is checked against the SHA-256 checksum getcomposer.org publishes.
+- `--composer` pins Composer to a release series such as `2.8` (or `1.10`, or `2.2` for the LTS),
+  installing its latest release. Setup switches to the pinned series when another one is
+  installed, and refuses a series that doesn't run on the PHP version. Without `--composer`, a
+  Composer that's already installed and runs is kept.
 - With several versions installed, `php` runs the one set up most recently.
 
 ### PHP-FPM
@@ -403,7 +407,7 @@ published as a prerelease.
 A release is installed with the `install.sh` from that release, so the URL is the pin:
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
 ```
 
 [`release/install.sh`](release/install.sh) is the template. `package.sh` writes the version,
