@@ -140,6 +140,16 @@ fn opensearch_rejects_bad_heap_sizes() {
 }
 
 #[test]
+fn opensearch_rejects_series_before_1_2() {
+    let output = paddock(&["setup", "opensearch", "1.1"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: opensearch: OpenSearch 1.1 isn't supported; the oldest supported series is 1.2\n"
+    );
+}
+
+#[test]
 fn postgres_rejects_minor_versions() {
     let output = paddock(&["setup", "postgres", "17.2"]);
     assert_eq!(output.status.code(), Some(2));
