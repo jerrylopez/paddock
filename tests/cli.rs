@@ -150,6 +150,16 @@ fn opensearch_rejects_series_before_1_2() {
 }
 
 #[test]
+fn php_rejects_composer_versions_that_arent_series() {
+    let output = paddock(&["setup", "php", "8.3", "--composer", "2.8.12"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        stderr(&output),
+        "paddock: php: --composer must be a Composer series like 2.8 (got '2.8.12')\n"
+    );
+}
+
+#[test]
 fn postgres_rejects_minor_versions() {
     let output = paddock(&["setup", "postgres", "17.2"]);
     assert_eq!(output.status.code(), Some(2));

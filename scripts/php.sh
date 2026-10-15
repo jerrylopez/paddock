@@ -1,23 +1,29 @@
 # php.sh: installs the PHP CLI from packages.sury.org (Ondřej Surý's Debian repository),
 # plus Composer from getcomposer.org. `paddock setup php-fpm` runs this script too and
 # also installs PHP-FPM, enabled under systemd.
-# Usage (via Paddock): paddock setup php|php-fpm <version> [--extensions a,b,c]
+# Usage (via Paddock): paddock setup php|php-fpm <version> [--extensions a,b,c] [--composer SERIES]
 #
 # <version> is major.minor, e.g. 8.3; the repository provides the latest patch.
 # --extensions adds to DEFAULT_EXTENSIONS. Names are as `php -m` shows them
 # (pdo_mysql, xdebug, ...); extensions built into PHP are accepted too.
 # Defaults that aren't packaged for the requested version are skipped with a
 # warning; extensions asked for with --extensions must be available.
+# --composer pins Composer to a release series such as 2.8 (its latest patch);
+# without it, a working Composer is kept, otherwise the latest 2.x is installed.
 
 # pcntl, posix, shmop and sysv* are what Red Hat's php-process package provides.
 DEFAULT_EXTENSIONS=amqp,bcmath,curl,gd,gmp,imagick,intl,json,mbstring,msgpack,mysqlnd,opcache,pcntl,pdo,posix,redis,shmop,soap,sodium,sysvmsg,sysvsem,sysvshm,xml,xmlrpc,zip
 SURY_KEYRING=/usr/share/keyrings/debsuryorg-archive-keyring.gpg
 
 option extensions ""
+option composer ""
 parse_args "$@"
 
 [[ $VERSION =~ ^[0-9]+\.[0-9]+$ ]] ||
   usage_error "version must be major.minor, e.g. 8.3 (got '$VERSION')"
+[ -z "$composer" ] || [[ $composer =~ ^[0-9]+\.[0-9]+$ ]] ||
+  usage_error "--composer must be a Composer series like 2.8 (got '$composer')"
+composer_series=$composer
 
 # add_extensions ARRAY LIST: append the names in comma-separated LIST to ARRAY,
 # lowercased, with dashes as underscores, skipping duplicates.
@@ -86,22 +92,46 @@ available() {
   apt-cache show "$1" >/dev/null 2>&1
 }
 
+# latest_composer SERIES: set `release` to the latest Composer release in
+# SERIES (e.g. 2.8). Packagist lists every release; getcomposer.org serves each.
+latest_composer() {
+  local file versions
+  apt_install ca-certificates curl
+  file=$(mktemp)
+  download https://repo.packagist.org/p2/composer/composer.json "$file"
+  versions=$(grep -o '"version":"[0-9]*\.[0-9]*\.[0-9]*"' "$file" | cut -d'"' -f4) || true
+  rm -f "$file"
+  release=$(grep "^${1//./\\.}\\." <<<"$versions" | sort -V | tail -n1) || true
+  [ -n "$release" ] ||
+    usage_error "Composer $1 isn't available (available: $(cut -d. -f1-2 <<<"$versions" | sort -uV | paste -sd ' '))"
+}
+
 # Composer is a single PHAR checked against getcomposer.org's published SHA-256.
+# install_composer [RELEASE]: install RELEASE (e.g. 2.8.12), or without one,
+# the latest 2.x that runs on this PHP.
 install_composer() {
-  # Composer 2.3+ needs PHP 7.2.5; older PHP gets the 2.2 LTS line.
-  local channel=latest-2.x
-  if [ "$("$php" -r 'echo PHP_VERSION_ID;')" -lt 70205 ]; then
-    channel=latest-2.2.x
-  fi
-  local url=https://getcomposer.org/download/$channel/composer.phar dir
-  info "Installing Composer"
+  local url dir
   apt_install ca-certificates curl
   dir=$(mktemp -d)
+  if [ -n "${1:-}" ]; then
+    url=https://getcomposer.org/download/$1/composer.phar
+  else
+    # Composer 2.3+ needs PHP 7.2.5; older PHP gets the 2.2 LTS line.
+    local channel=latest-2.x
+    if [ "$("$php" -r 'echo PHP_VERSION_ID;')" -lt 70205 ]; then
+      channel=latest-2.2.x
+    fi
+    url=https://getcomposer.org/download/$channel/composer.phar
+  fi
   download "$url" "$dir/composer.phar"
   download "$url.sha256sum" "$dir/composer.phar.sha256sum"
   if ! (cd "$dir" && sha256sum --check --quiet composer.phar.sha256sum >/dev/null 2>&1); then
     rm -rf "$dir"
     die "the Composer download from $url doesn't match its checksum"
+  fi
+  if [ -n "${1:-}" ] && ! COMPOSER_ALLOW_SUPERUSER=1 "$php" "$dir/composer.phar" --version --no-ansi >/dev/null 2>&1; then
+    rm -rf "$dir"
+    usage_error "Composer $1 doesn't run on PHP $VERSION"
   fi
   quietly as_root install -m 0755 "$dir/composer.phar" /usr/local/bin/composer
   rm -rf "$dir"
@@ -184,10 +214,21 @@ composer_version() {
   echo "${BASH_REMATCH[1]}"
 }
 
-# Reinstall when Composer is missing or can't run on this PHP (e.g. after
-# switching from 8.3 to 7.1, which needs the 2.2 LTS line).
+# Install a pinned series unless it's what's installed. Unpinned, reinstall
+# when Composer is missing or can't run on this PHP (e.g. after switching from
+# 8.3 to 7.1, which needs the 2.2 LTS line).
 composer=$(composer_version) || true
-if [ -z "$composer" ]; then
+if [ -n "$composer_series" ] && [ "$(cut -d. -f1-2 <<<"$composer")" != "$composer_series" ]; then
+  latest_composer "$composer_series"
+  if [ -n "$composer" ]; then
+    info "Switching Composer $(cut -d. -f1-2 <<<"$composer") to $composer_series"
+  else
+    info "Installing Composer $composer_series"
+  fi
+  install_composer "$release"
+  composer=$(composer_version) || die "Composer was installed but doesn't run on PHP $VERSION"
+elif [ -z "$composer" ]; then
+  info "Installing Composer"
   install_composer
   composer=$(composer_version) || die "Composer was installed but doesn't run on PHP $VERSION"
 fi
