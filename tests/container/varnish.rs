@@ -48,16 +48,25 @@ fn caches_the_backend_under_systemd_and_survives_a_restart() {
 
 #[test]
 fn switches_series_including_back_to_the_lts() {
-    // Debian's own Varnish (7.1) is newer than 6.0; the pin keeps the repository's.
+    // 7.0 comes from the repository's Debian 11 packages. Debian's own Varnish
+    // (7.1) is newer than 6.0; the pin keeps the repository's.
     let outcome = harness::run(
-        "paddock setup varnish 8.0\n\
+        "paddock setup varnish 7.0\n\
+         varnishd -V 2>&1 | grep -o 'varnish-[0-9.]*'\n\
+         paddock setup varnish 8.0\n\
          paddock setup varnish 6.0\n\
          varnishd -V 2>&1 | grep -o 'varnish-[0-9.]*'",
     );
     outcome.assert_success();
     let lines: Vec<_> = outcome.stdout.lines().collect();
+    assert_eq!(
+        lines[0], "paddock: varnish: Installing Varnish 7.0",
+        "\n{outcome}"
+    );
+    assert!(lines[2].starts_with("varnish-7.0."), "\n{outcome}");
     assert!(
-        lines.contains(&"paddock: varnish: Switching Varnish 8.0 to 6.0"),
+        lines.contains(&"paddock: varnish: Switching Varnish 7.0 to 8.0")
+            && lines.contains(&"paddock: varnish: Switching Varnish 8.0 to 6.0"),
         "\n{outcome}"
     );
     assert!(

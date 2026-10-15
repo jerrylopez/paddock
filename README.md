@@ -24,7 +24,7 @@ executable with `chmod +x .agents/setup`, and commit it:
 set -euo pipefail
 
 # Paddock itself, pinned to one release.
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
 
 # The environment this branch needs.
 paddock setup php 8.4 --extensions xdebug
@@ -37,7 +37,7 @@ Every new orb for that branch now comes up with those services installed and run
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.1.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.2.0/install.sh | bash
 ```
 
 Each release ships its own `install.sh`, with that release's download URL and SHA-256
@@ -53,7 +53,7 @@ for aarch64: MySQL and RabbitMQ are x86_64 only.
 ## What's pinned
 
 - **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
-  with every install script built in, so `v0.1.0` always runs the same scripts. Nothing is
+  with every install script built in, so `v0.2.0` always runs the same scripts. Nothing is
   fetched at run time. Upgrading Paddock means changing that URL in a commit.
 - **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
   PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
@@ -218,19 +218,24 @@ nginx is enabled and started. Wiring nginx to PHP-FPM is left to presets.
 ### OpenSearch
 
 ```sh
-paddock setup opensearch 3
-paddock setup opensearch 2 --heap 1g
+paddock setup opensearch 3.9
+paddock setup opensearch 1.2 --heap 1g
 ```
 
-Installs OpenSearch from [its APT repository](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/debian/).
-The version is the major (`2` or `3`); the repository provides the latest release in it.
+Installs OpenSearch from [its APT repositories](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/debian/).
+The version is a series from `1.2` on (`1.2`, `1.3`, `2.0`–`2.19`, `3.x`); the repository provides
+its latest release. The repositories start at 1.3 and 2.5, so 1.2 and 2.0–2.4 get their final
+release (1.2.4, 2.0.1, ..., 2.4.1) from OpenSearch's release tarball instead, checked against its
+signature and set up like the package, with a systemd unit Paddock writes.
 
 - Configured for local development: one node on `127.0.0.1:9200`, security plugin disabled (no
   TLS or passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
   `/etc/opensearch/opensearch.yml` and restarts OpenSearch when it changes.
 - Under systemd, OpenSearch is enabled and started, and setup waits until the cluster is usable.
-- Switching an install to another major isn't supported, and it refuses to install next to
-  Elasticsearch, which uses the same port.
+- Moving to a newer series within a major upgrades it, including from a tarball install to the
+  package (1.2 to 1.3, or 2.4 to 2.5 and later), keeping the data. Going back or to another
+  major isn't supported, and it refuses to install next to Elasticsearch, which uses the same
+  port.
 
 ### Typesense
 
@@ -323,13 +328,14 @@ latest patch. Moving to a newer series upgrades; going back isn't supported.
 
 ```sh
 paddock setup varnish 8.0
-paddock setup varnish 6.0 --backend 127.0.0.1:3000 --port 6081 --memory 512m
+paddock setup varnish 7.0 --backend 127.0.0.1:3000 --port 6081 --memory 512m
 ```
 
 Installs Varnish Cache from [its packagecloud repositories](https://packagecloud.io/varnishcache).
-The version is a series: `6.0` (LTS), `7.6`, `7.7` or `8.0`; the repository provides its latest
+The version is a series: `6.0` (LTS), `7.0` to `7.7`, or `8.0`; the repository provides its latest
 release, and running setup with another series switches to it. The repository's packages take
-priority over Debian's own Varnish.
+priority over Debian's own Varnish. 7.0 to 7.3 predate Debian 12, so they come from their
+repository's Debian 11 packages, which run on it.
 
 - Listens on `127.0.0.1:6081` (`--port`) and caches `--backend` (default `127.0.0.1:8080`) in
   `--memory` (default `256m`).

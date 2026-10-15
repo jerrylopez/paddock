@@ -1,7 +1,7 @@
 # varnish.sh: installs Varnish Cache from its official packagecloud repositories.
 # Usage (via Paddock): paddock setup varnish <major.minor> [flags...]
 #
-# <major.minor> is a supported release series: 6.0 (LTS), 7.6, 7.7 or 8.0.
+# <major.minor> is a supported release series: 6.0 (LTS), 7.0 to 7.7, or 8.0.
 # Each has its own repository; an APT pin installs the latest patch in it.
 # Running setup with another series switches to it (Varnish only holds a
 # cache, so going back is fine too).
@@ -21,13 +21,21 @@ option port 6081
 option memory 256m
 parse_args "$@"
 
-# Each series has its own repository and signing key.
+# Each series has its own repository and signing key. 7.0 to 7.3 predate
+# Debian 12 and have only Debian 11 (bullseye) packages, which run on it.
+suite=
 case $VERSION in
   6.0) repo=varnish60lts key=48D81A24CB0456F5D59431D94CFCFD6BA750EDCD ;;
+  7.0) repo=varnish70 key=A4FED748BC3C7FC82C34F108985A1C79B02B8211 suite=bullseye ;;
+  7.1) repo=varnish71 key=443CE2EFE167F28B46EFC1BF4880B991C11CFA86 suite=bullseye ;;
+  7.2) repo=varnish72 key=CEF46AAF4564F3974FDBED9710106C467B0C948E suite=bullseye ;;
+  7.3) repo=varnish73 key=EE52511AD12334D2EFD3C2B935A97C4F70FF371F suite=bullseye ;;
+  7.4) repo=varnish74 key=9D86454826BA74D76C4020828880E6CBA76CBB0B ;;
+  7.5) repo=varnish75 key=97A3F27B485EE6460CCFE444B9C478F0CD3D2D60 ;;
   7.6) repo=varnish76 key=6B803A8DF5983DDEB704FF7435BA265D95368ADC ;;
   7.7) repo=varnish77 key=7B9C4CC47FCF4E7D1B39889094C63CC2D7584016 ;;
   8.0) repo=varnish80 key=42E4EDD233A3463A90671EEAFC3FECD870B8A552 ;;
-  *) require_version 6.0 7.6 7.7 8.0 ;;
+  *) require_version 6.0 7.0 7.1 7.2 7.3 7.4 7.5 7.6 7.7 8.0 ;;
 esac
 [[ $backend =~ ^([A-Za-z0-9.-]+):([0-9]+)$ ]] ||
   usage_error "--backend must be HOST:PORT (got '$backend')"
@@ -45,8 +53,9 @@ case $(dpkg --print-architecture) in
 esac
 
 apt_keyring "varnish-$repo" "https://packagecloud.io/varnishcache/$repo/gpgkey" "$key"
-apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ $codename main"
-# The latest release in this series, over Debian's own Varnish (7.1).
+apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ ${suite:-$codename} main"
+# The latest release in this series, over Debian's own Varnish (7.1.1; the
+# 7.1 repository's 7.1.2 is newer, so the pin still picks it).
 apt_pin varnish "$VERSION.*" varnish
 
 installed=$(installed_series varnish)
