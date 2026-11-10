@@ -51,18 +51,39 @@ case $(dpkg --print-architecture) in
   amd64 | arm64) ;;
   *) die "Varnish publishes no packages for $(dpkg --print-architecture)" ;;
 esac
+# No series has Debian 13 (trixie) packages; their Debian 12 ones run on it.
+# There, 6.0 also needs bookworm's libpcre3 (13 dropped PCRE1), and apt
+# rejects its repository's signing key (bound with SHA-1), so setup checks the
+# repository with gpgv and installs the package file instead (see gpgv_deb).
+verify_with_gpgv=
+if [ "$codename" = trixie ]; then
+  suite=${suite:-bookworm}
+  if [ "$VERSION" = 6.0 ]; then
+    verify_with_gpgv=1
+    bookworm_library libpcre3
+  fi
+fi
 
+repository=https://packagecloud.io/varnishcache/$repo/debian
 apt_keyring "varnish-$repo" "https://packagecloud.io/varnishcache/$repo/gpgkey" "$key"
-apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] https://packagecloud.io/varnishcache/$repo/debian/ ${suite:-$codename} main"
-# The latest release in this series, over Debian's own Varnish (7.1.1; the
-# 7.1 repository's 7.1.2 is newer, so the pin still picks it).
+[ -n "$verify_with_gpgv" ] ||
+  apt_source varnish "deb [signed-by=/etc/apt/keyrings/varnish-$repo.gpg] $repository/ ${suite:-$codename} main"
+# The latest release in this series, over Debian's own Varnish (7.1.1 in
+# Debian 12, 7.7.0 in 13; the repositories' 7.1.2 and 7.7.3 are newer, so the
+# pin still picks them).
 apt_pin varnish "$VERSION.*" varnish
 
 installed=$(installed_series varnish)
 switching=
 if [ "$installed" != "$VERSION" ]; then
   apt_update
-  require_series varnish Varnish
+  target=varnish
+  if [ -n "$verify_with_gpgv" ]; then
+    gpgv_deb "varnish-$repo" "$repository" "$suite" varnish Varnish
+    target=$DEB
+  else
+    require_series varnish Varnish
+  fi
   if [ -n "$installed" ]; then
     info "Switching Varnish $installed to $VERSION"
     switching=1
@@ -70,7 +91,8 @@ if [ "$installed" != "$VERSION" ]; then
     info "Installing Varnish $VERSION"
   fi
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --allow-downgrades --no-install-recommends varnish
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --allow-downgrades --no-install-recommends "$target"
+  [ -z "$verify_with_gpgv" ] || rm -rf "$(dirname "$DEB")"
 fi
 
 write_file "$VARNISH_VCL" "# Managed by Paddock (paddock setup varnish).

@@ -79,6 +79,17 @@ pub fn run(script: &str) -> Outcome {
     Outcome::from_output(output)
 }
 
+/// The base image's release codename, e.g. `bookworm`, for tests of what a
+/// vendor publishes only for some releases.
+pub fn codename() -> &'static str {
+    static CODENAME: OnceLock<String> = OnceLock::new();
+    CODENAME.get_or_init(|| {
+        let outcome = run(". /etc/os-release && echo \"$VERSION_CODENAME\"");
+        outcome.assert_success();
+        outcome.stdout.trim().to_owned()
+    })
+}
+
 /// A container running systemd as PID 1, like an orb, so `systemctl enable
 /// --now` works. Like an orb, it has a `dev` user with passwordless sudo, and
 /// `setup_twice_then_verify` runs setup as that user. Each container is

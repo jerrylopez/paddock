@@ -44,6 +44,10 @@ esac
 os=$(. /etc/os-release && echo "${ID:-unknown}")
 codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
 [ "$os" = debian ] || die "only Debian is supported (this system is '$os')"
+# Oracle publishes 8.0 only up to Debian 12 (bookworm). Its bookworm packages
+# run on Debian 13 with bookworm's libaio1, which 13 renamed to libaio1t64.
+suite_codename=$codename
+[ "$VERSION" != 8.0 ] || [ "$codename" != trixie ] || suite_codename=bookworm
 arch=$(dpkg --print-architecture)
 case $arch in
   amd64 | i386) ;;
@@ -63,7 +67,8 @@ add_mysql_repository() {
     [ "$installed" = "$suite" ] ||
       die "MySQL from $installed is already installed; switching to $VERSION isn't supported (remove mysql-community-server and /var/lib/mysql first)"
   fi
-  apt_source mysql "deb [signed-by=/etc/apt/keyrings/mysql.gpg] https://repo.mysql.com/apt/debian $codename $suite"
+  [ "$suite_codename" = "$codename" ] || bookworm_library libaio1
+  apt_source mysql "deb [signed-by=/etc/apt/keyrings/mysql.gpg] https://repo.mysql.com/apt/debian $suite_codename $suite"
 }
 
 # `ping` succeeds whenever the server is up, even if login would be refused.

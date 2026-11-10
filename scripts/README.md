@@ -15,7 +15,7 @@ script and pipes it to bash:
   `DEBIAN_FRONTEND=noninteractive` is exported.
 - stdout and stderr go straight to the terminal.
 
-Scripts run in Amp orbs (Debian 12, a normal user with passwordless sudo, systemd) and in the
+Scripts run in Amp orbs (Debian 12 or 13, a normal user with passwordless sudo, systemd) and in the
 test containers (Debian, root, no sudo, no systemd). Use `as_root` for privileged commands, and
 don't rely on `/usr/sbin` being on the PATH: a normal user's PATH doesn't include it.
 
@@ -110,6 +110,8 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `apt_source NAME LINE` | Makes `/etc/apt/sources.list.d/NAME.list` contain LINE; if that changes it, lists are refreshed again |
 | `package_installed PKG` | Succeeds if the Debian package is installed |
 | `has_command NAME` | Succeeds if NAME is on the PATH |
+| `bookworm_library PKG` | On Debian 13, makes Debian 12's PKG installable (for vendor packages that need `libaio1`, `libpcre3`), pinning everything else in Debian 12 away |
+| `gpgv_deb KEYRING REPO SUITE PKG LABEL` | Downloads the latest PKG in the `$VERSION` series from a repository Debian 13's apt rejects (SHA-1 key), checked with gpgv; sets `$DEB` for `apt-get install` |
 | `has_systemd` | Succeeds if systemd manages the system (orbs, servers), not in a plain container |
 
 Pitfalls:

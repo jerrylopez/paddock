@@ -102,10 +102,9 @@ fn applies_flags_without_systemd_and_refuses_to_switch_series() {
 fn rejects_series_without_a_repository() {
     let outcome = harness::run("paddock setup mariadb 10.2 || echo \"exit=$?\"");
     assert!(outcome.stdout.ends_with("exit=2\n"), "\n{outcome}");
-    assert!(
-        outcome
-            .stderr
-            .contains("paddock: mariadb: MariaDB 10.2 has no repository for Debian bookworm"),
-        "\n{outcome}"
+    let expected = format!(
+        "paddock: mariadb: MariaDB 10.2 has no repository for Debian {}",
+        harness::codename()
     );
+    assert!(outcome.stderr.contains(&expected), "\n{outcome}");
 }

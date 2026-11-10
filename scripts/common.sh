@@ -319,3 +319,73 @@ apt_install() {
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
     apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "${missing[@]}"
 }
+
+# --- Debian 13 compatibility --------------------------------------------------
+
+# bookworm_library PACKAGE: make the Debian 12 (bookworm) library PACKAGE
+# installable on Debian 13, for vendor packages built for Debian 12 that need
+# a library Debian 13 renamed or dropped (libaio1, libpcre3). Adds bookworm's
+# archive, signed by Debian's own key, with every other package pinned away
+# from it.
+bookworm_library() {
+  apt_source debian-bookworm "deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] http://deb.debian.org/debian bookworm main"
+  write_file /etc/apt/preferences.d/debian-bookworm "Package: *
+Pin: release o=Debian,n=bookworm
+Pin-Priority: -1"
+  write_file "/etc/apt/preferences.d/debian-bookworm-$1" "Package: $1
+Pin: release o=Debian,n=bookworm
+Pin-Priority: 500"
+}
+
+# gpgv_deb KEYRING REPOSITORY SUITE PACKAGE LABEL: download the latest PACKAGE
+# in the $VERSION series from an APT repository whose signing key Debian 13's
+# apt rejects (its key is bound with SHA-1) but gpgv still accepts. Checks the
+# chain apt would: SUITE's InRelease against /etc/apt/keyrings/KEYRING.gpg,
+# the `main` package list against it, and the .deb against the list.
+# Sets DEB to the downloaded file, for `apt-get install "$DEB"`, which takes
+# its dependencies from Debian; remove its directory afterwards. Usage error,
+# listing the available series, if there's no release in the series.
+gpgv_deb() {
+  local keyring=/etc/apt/keyrings/$1.gpg repository=$2 suite=$3 package=$4 label=$5
+  local dir list want found versions parts series
+  apt_install ca-certificates curl gpgv
+  dir=$(mktemp -d)
+  list=main/binary-$(dpkg --print-architecture)/Packages
+  download "$repository/dists/$suite/InRelease" "$dir/InRelease"
+  if ! gpgv --keyring "$keyring" --output "$dir/Release" "$dir/InRelease" >/dev/null 2>&1; then
+    rm -rf "$dir"
+    die "the package list from $repository doesn't match its signature"
+  fi
+  # The SHA256 section lists `HASH SIZE PATH`; the MD5Sum section has shorter hashes.
+  want=$(awk -v path="$list" '$3 == path && length($1) == 64 { print $1 }' "$dir/Release")
+  download "$repository/dists/$suite/$list" "$dir/Packages"
+  if [ -z "$want" ] || [ "$(sha256sum <"$dir/Packages" | cut -d' ' -f1)" != "$want" ]; then
+    rm -rf "$dir"
+    die "the package list from $repository doesn't match its signed checksum"
+  fi
+  # One `VERSION FILENAME SHA256` line per release of PACKAGE, newest last.
+  versions=$(awk -v package="$package" '
+    /^Package:/ { p = $2; v = f = s = "" }
+    /^Version:/ { v = $2 }
+    /^Filename:/ { f = $2 }
+    /^SHA256:/ { s = $2 }
+    /^$/ && p == package && f != "" { print v, f, s; p = "" }
+    END { if (p == package && f != "") print v, f, s }' "$dir/Packages" | sort -V)
+  found=$(while read -r version file sum; do
+    if [[ $(_paddock_upstream_version <<<"$version") == "$VERSION".* ]]; then
+      echo "$file $sum"
+    fi
+  done <<<"$versions" | tail -n1)
+  if [ -z "$found" ]; then
+    rm -rf "$dir"
+    parts=$(($(tr -cd . <<<"$VERSION" | wc -c) + 1))
+    series=$(awk '{ print $1 }' <<<"$versions" | _paddock_upstream_version | cut -d. -f1-"$parts" | sort -uV | paste -sd ' ') || true
+    usage_error "$label $VERSION isn't available (available: ${series:-none})"
+  fi
+  DEB=$dir/$(basename "${found%% *}")
+  download "$repository/${found%% *}" "$DEB"
+  if [ "$(sha256sum <"$DEB" | cut -d' ' -f1)" != "${found##* }" ]; then
+    rm -rf "$dir"
+    die "the $label download from $repository doesn't match its signed checksum"
+  fi
+}

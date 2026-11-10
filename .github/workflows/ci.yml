@@ -61,15 +61,19 @@ jobs:
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
 
   container:
-    name: Container tests (${{ matrix.module }})
+    name: Container tests (${{ matrix.module }}, ${{ matrix.base }})
     needs: container-modules
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         module: ${{ fromJSON(needs.container-modules.outputs.modules) }}
+        # Every supported Debian release.
+        base: [bookworm, trixie]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo container-tests --locked -- '${{ matrix.module }}::'
+        env:
+          PADDOCK_TEST_BASE_IMAGE: debian:${{ matrix.base }}-slim

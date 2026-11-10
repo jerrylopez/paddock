@@ -56,7 +56,13 @@ esac
 
 # Read in a subshell: os-release defines its own VERSION.
 os=$(. /etc/os-release && echo "${ID:-unknown}")
+codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
 [ "$os" = debian ] || die "only Debian is supported (this system is '$os')"
+# Debian 13's apt rejects the 1.x and 2.x repositories' signing key (bound
+# with SHA-1), so there setup checks the repository with gpgv, which still
+# accepts it, and installs the package file instead (see gpgv_deb).
+verify_with_gpgv=
+[ "$codename" != trixie ] || [ "$major" = 3 ] || verify_with_gpgv=1
 arch=$(dpkg --print-architecture)
 case $arch in
   amd64 | arm64) ;;
@@ -155,13 +161,21 @@ if [ -n "$tarball" ]; then
     install_tarball
   fi
 else
+  repository=https://artifacts.opensearch.org/releases/bundle/opensearch/$major.x/apt
   apt_keyring "opensearch-$major" "$key_url" "$key_fingerprint"
-  apt_source opensearch "deb [signed-by=$keyring] https://artifacts.opensearch.org/releases/bundle/opensearch/$major.x/apt stable main"
+  [ -n "$verify_with_gpgv" ] ||
+    apt_source opensearch "deb [signed-by=$keyring] $repository stable main"
   apt_pin opensearch "$VERSION.*" opensearch
 
   if [ "$installed" != "$VERSION" ]; then
     apt_update
-    require_series opensearch OpenSearch
+    target=opensearch
+    if [ -n "$verify_with_gpgv" ]; then
+      gpgv_deb "opensearch-$major" "$repository" stable opensearch OpenSearch
+      target=$DEB
+    else
+      require_series opensearch OpenSearch
+    fi
     if [ -n "$installed" ]; then
       info "Upgrading OpenSearch $installed to $VERSION"
       upgraded=1
@@ -176,7 +190,8 @@ else
     quietly as_root env DEBIAN_FRONTEND=noninteractive \
       DISABLE_INSTALL_DEMO_CONFIG=true DISABLE_SECURITY_PLUGIN=true \
       OPENSEARCH_INITIAL_ADMIN_PASSWORD="Paddock-$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')!" \
-      apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends opensearch
+      apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "$target"
+    [ -z "$verify_with_gpgv" ] || rm -rf "$(dirname "$DEB")"
   fi
 fi
 
