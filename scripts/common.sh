@@ -306,10 +306,16 @@ require_series() {
   usage_error "$2 $VERSION isn't available (available: ${series:-none})"
 }
 
-# apt_install PACKAGE...: install the packages that aren't installed yet.
-# Refreshes package lists first (see `apt_update`), only if something is missing.
+# apt_install [--allow-downgrades] PACKAGE...: install the packages that
+# aren't installed yet. Refreshes package lists first (see `apt_update`), only
+# if something is missing. --allow-downgrades lets a pin above 1000 replace
+# installed packages with older versions, which apt otherwise refuses.
 apt_install() {
-  local package missing=()
+  local package missing=() options=()
+  if [ "${1:-}" = --allow-downgrades ]; then
+    options+=("$1")
+    shift
+  fi
   for package in "$@"; do
     package_installed "$package" || missing+=("$package")
   done
@@ -317,7 +323,7 @@ apt_install() {
 
   apt_update
   quietly as_root env DEBIAN_FRONTEND=noninteractive \
-    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "${missing[@]}"
+    apt-get -o Acquire::Retries=3 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y --no-install-recommends "${options[@]}" "${missing[@]}"
 }
 
 # --- Debian 13 compatibility --------------------------------------------------

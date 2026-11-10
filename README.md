@@ -193,8 +193,10 @@ paddock setup mariadb 12.3 --database app --username app --password secret
 Installs MariaDB Server from [the MariaDB Foundation's repository](https://mariadb.org/download/).
 The version is a release series with a bookworm repository (10.11, 11.4, 11.8 and 12.3 today); the
 repository provides its latest release, and its packages take priority over Debian's own MariaDB.
-On Debian 13, a series without a trixie repository (10.11 and 11.4 today) uses its bookworm one,
-with [bookworm's `libaio1`](#debian-13).
+Debian MariaDB packages that are already installed, such as `libmariadb3` from
+`default-libmysqlclient-dev`, are replaced with the series' packages, even when that's an older
+release (Debian 13 ships 11.8). On Debian 13, a series without a trixie repository (10.11 and
+11.4 today) uses its bookworm one, with [bookworm's `libaio1`](#debian-13).
 
 - Same flags as MySQL. With `--root-password`, root can log in with that password and still
   through the Unix socket (`sudo mariadb`).
