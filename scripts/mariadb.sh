@@ -3,6 +3,7 @@
 #
 # <series> is a release series such as 11.4 (10.11, 11.4, 11.8 and 12.3 have
 # bookworm repositories today); the repository provides its latest release.
+# On Debian 13, series without a trixie repository use their bookworm one.
 # Switching an install to another series isn't supported.
 #
 #   --database NAME       create a database
@@ -18,6 +19,7 @@
 MARIADB_KEY_URL=https://mariadb.org/mariadb_release_signing_key.pgp
 MARIADB_KEY_FINGERPRINT=177F4010FE56CA3336300305F1656F24C74CD1D8
 MARIADB_PIN=/etc/apt/preferences.d/mariadb
+MARIADB_SOURCE=/etc/apt/sources.list.d/mariadb.list
 MARIADB_SOCKET=/run/mysqld/mysqld.sock
 
 option database ""
@@ -57,14 +59,28 @@ if package_installed mariadb-server; then
 fi
 
 repository=https://deb.mariadb.org/$VERSION/debian
-if ! package_installed mariadb-server; then
+has_repository() {
+  curl -fsSIL --retry 3 --retry-connrefused "$repository/dists/$1/Release" >/dev/null 2>&1
+}
+
+# On Debian 13, a series without a trixie repository uses its bookworm one,
+# whose packages run there with bookworm's libaio1 (13 renamed it libaio1t64).
+# A rerun keeps the repository the first setup chose.
+suite=$codename
+if package_installed mariadb-server; then
+  [ ! -f "$MARIADB_SOURCE" ] || suite=$(awk '{ print $(NF-1) }' "$MARIADB_SOURCE")
+else
   apt_install ca-certificates curl
-  curl -fsSIL --retry 3 --retry-connrefused "$repository/dists/$codename/Release" >/dev/null 2>&1 ||
-    usage_error "MariaDB $VERSION has no repository for Debian $codename; see https://mariadb.org/download/ for release series"
+  if ! has_repository "$codename"; then
+    [ "$codename" = trixie ] && has_repository bookworm ||
+      usage_error "MariaDB $VERSION has no repository for Debian $codename; see https://mariadb.org/download/ for release series"
+    suite=bookworm
+  fi
 fi
+[ "$suite" = "$codename" ] || bookworm_library libaio1
 apt_keyring mariadb "$MARIADB_KEY_URL" "$MARIADB_KEY_FINGERPRINT"
-apt_source mariadb "deb [signed-by=/etc/apt/keyrings/mariadb.gpg] $repository $codename main"
-# Prefer the repository's packages over Debian's own MariaDB (10.11).
+apt_source mariadb "deb [signed-by=/etc/apt/keyrings/mariadb.gpg] $repository $suite main"
+# Prefer the repository's packages over Debian's own MariaDB (10.11, or 11.8 in Debian 13).
 write_file "$MARIADB_PIN" "Package: *
 Pin: origin deb.mariadb.org
 Pin-Priority: 1001"

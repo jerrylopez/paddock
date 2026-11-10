@@ -68,10 +68,13 @@ fn upgrades_series_and_refuses_to_go_back() {
             .contains("paddock: redis: Redis 8.2 is installed; going back to 7.4 isn't supported"),
         "\n{outcome}"
     );
+    // The oldest series differ by Debian release (6.0 for bookworm, 6.2 for trixie).
+    let rejected = outcome
+        .stderr
+        .lines()
+        .find(|line| line.starts_with("paddock: redis: Redis 9.9 isn't available (available: "));
     assert!(
-        outcome.stderr.contains(
-            "paddock: redis: Redis 9.9 isn't available (available: 6.0 6.2 7.0 7.2 7.4 8.0 8.2"
-        ),
+        rejected.is_some_and(|line| line.contains(" 7.2 7.4 8.0 8.2 ")),
         "\n{outcome}"
     );
 }

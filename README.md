@@ -1,7 +1,7 @@
 # Paddock
 
 Paddock sets up services natively on Debian, one line per service, so an Amp orb (or any
-Debian 12 server) gets the same environment every time:
+Debian 12 or 13 server) gets the same environment every time:
 
 ```sh
 paddock setup php 8.4 --extensions redis
@@ -24,7 +24,7 @@ executable with `chmod +x .agents/setup`, and commit it:
 set -euo pipefail
 
 # Paddock itself, pinned to one release.
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
 
 # The environment this branch needs.
 paddock setup php 8.4 --extensions xdebug
@@ -37,7 +37,7 @@ Every new orb for that branch now comes up with those services installed and run
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
 ```
 
 Each release ships its own `install.sh`, with that release's download URL and SHA-256
@@ -45,15 +45,30 @@ checksums written in. It installs exactly that release to `/usr/local/bin/paddoc
 sudo if needed; set `PADDOCK_INSTALL_DIR` to change the directory), refuses a download whose
 checksum doesn't match, and does nothing if the same binary is already there.
 
-Requirements: Debian 12 (bookworm) on x86_64 or aarch64, root or passwordless sudo, and systemd
+Requirements: Debian 12 (bookworm) or 13 (trixie) on x86_64 or aarch64, root or passwordless sudo, and systemd
 for services to start on their own (orbs and servers have it; plain containers don't, so
 services are installed and configured there but not left running). A few vendors don't publish
 for aarch64: MySQL and RabbitMQ are x86_64 only.
 
+### Debian 13
+
+Some older versions aren't published for Debian 13 (trixie), but their Debian 12 packages run on
+it. Paddock bridges the two gaps that would otherwise stop them, only on Debian 13:
+
+- **Libraries Debian 13 renamed or dropped.** MySQL 8.0 and MariaDB 10.11 and 11.4 need `libaio1`,
+  and Varnish 6.0 needs `libpcre3`. Paddock adds Debian 12's archive
+  (`/etc/apt/sources.list.d/debian-bookworm.list`, signed by Debian's own key) with every package
+  pinned away from it except those libraries. PCRE1 is no longer maintained upstream.
+- **Signing keys Debian 13's apt rejects.** The repositories for Varnish 6.0 and OpenSearch 1.x and
+  2.x are signed with keys bound with SHA-1, which apt refuses there. Paddock checks them with
+  `gpgv`, which still accepts those keys, following the chain apt would (signed release file,
+  package list, package), and installs the package file with apt. These repositories aren't
+  added to apt's sources.
+
 ## What's pinned
 
 - **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
-  with every install script built in, so `v0.3.0` always runs the same scripts. Nothing is
+  with every install script built in, so `v0.4.0` always runs the same scripts. Nothing is
   fetched at run time. Upgrading Paddock means changing that URL in a commit.
 - **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
   PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
@@ -83,7 +98,7 @@ isn't available says so, and lists the available ones where the vendor publishes
 | PHP-FPM | `paddock setup php-fpm 8.4` | [details](#php-fpm) |
 | nginx | `paddock setup nginx 1.30` | [details](#nginx) |
 | MySQL | `paddock setup mysql 8.4 --database app --username app --password secret` | [details](#mysql) |
-| MariaDB | `paddock setup mariadb 11.4 --database app --username app --password secret` | [details](#mariadb) |
+| MariaDB | `paddock setup mariadb 11.8 --database app --username app --password secret` | [details](#mariadb) |
 | PostgreSQL | `paddock setup postgres 17 --database app --username app --password secret` | [details](#postgresql) |
 | Redis | `paddock setup redis 8.2 --password secret` | [details](#redis) |
 | Valkey | `paddock setup valkey 9.1` | [details](#valkey) |
@@ -171,13 +186,15 @@ The version is the major (`8` or `9`); the repository provides the latest releas
 ### MariaDB
 
 ```sh
-paddock setup mariadb 11.4
-paddock setup mariadb 10.11 --database app --username app --password secret
+paddock setup mariadb 11.8
+paddock setup mariadb 12.3 --database app --username app --password secret
 ```
 
 Installs MariaDB Server from [the MariaDB Foundation's repository](https://mariadb.org/download/).
 The version is a release series with a bookworm repository (10.11, 11.4, 11.8 and 12.3 today); the
 repository provides its latest release, and its packages take priority over Debian's own MariaDB.
+On Debian 13, a series without a trixie repository (10.11 and 11.4 today) uses its bookworm one,
+with [bookworm's `libaio1`](#debian-13).
 
 - Same flags as MySQL. With `--root-password`, root can log in with that password and still
   through the Unix socket (`sudo mariadb`).
@@ -196,6 +213,8 @@ The download of Oracle's signing key is checked against its fingerprint.
 
 - The version picks a release series: `8.0`, `8.4` or `9.7`; the repository provides
   the latest release in it. Switching an existing install to another series isn't supported.
+  Oracle doesn't publish 8.0 for Debian 13, so there it comes from the bookworm packages, with
+  [bookworm's `libaio1`](#debian-13).
 - `--database` creates a database. `--username` and `--password` create a user, with full access to
   that database when `--database` is given.
 - Root logs in through the Unix socket (`sudo mysql`) unless you pass `--root-password`. Once root
@@ -230,7 +249,8 @@ Installs OpenSearch from [its APT repositories](https://opensearch.org/docs/late
 The version is a series from `1.2` on (`1.2`, `1.3`, `2.0`–`2.19`, `3.x`); the repository provides
 its latest release. The repositories start at 1.3 and 2.5, so 1.2 and 2.0–2.4 get their final
 release (1.2.4, 2.0.1, ..., 2.4.1) from OpenSearch's release tarball instead, checked against its
-signature and set up like the package, with a systemd unit Paddock writes.
+signature and set up like the package, with a systemd unit Paddock writes. On Debian 13, 1.x and
+2.x packages are [checked with `gpgv`](#debian-13) instead of apt.
 
 - Configured for local development: one node on `127.0.0.1:9200`, security plugin disabled (no
   TLS or passwords), JVM heap 512m unless `--heap` says otherwise. Paddock manages
@@ -268,7 +288,7 @@ paddock setup valkey 9.1 --password secret
 
 Installs Valkey from [its official release builds](https://valkey.io/download/), checked against
 their published SHA-256. Valkey publishes no Debian repository (bookworm-backports only has 8.0.1),
-and the Ubuntu 22.04 build is used, which runs on Debian 12. The version is a release series;
+and the Ubuntu 22.04 build is used, which runs on Debian 12 and 13. The version is a release series;
 setup installs its latest patch (found by checking which `9.1.x` builds exist). Moving to a newer
 series upgrades; going back isn't supported.
 
@@ -338,8 +358,9 @@ paddock setup varnish 7.0 --backend 127.0.0.1:3000 --port 6081 --memory 512m
 Installs Varnish Cache from [its packagecloud repositories](https://packagecloud.io/varnishcache).
 The version is a series: `6.0` (LTS), `7.0` to `7.7`, or `8.0`; the repository provides its latest
 release, and running setup with another series switches to it. The repository's packages take
-priority over Debian's own Varnish. 7.0 to 7.3 predate Debian 12, so they come from their
-repository's Debian 11 packages, which run on it.
+priority over Debian's own Varnish. No series has Debian 13 packages, so on Debian 13 the Debian 12
+ones are used; 7.0 to 7.3 predate Debian 12 and come from their Debian 11 packages, which run
+on both. On Debian 13, 6.0 is [checked with `gpgv`](#debian-13) and uses bookworm's `libpcre3`.
 
 - Listens on `127.0.0.1:6081` (`--port`) and caches `--backend` (default `127.0.0.1:8080`) in
   `--memory` (default `256m`).
@@ -364,7 +385,8 @@ cargo container-tests       # container tests (needs Docker)
 
 Container tests build `tests/Dockerfile`, which compiles Paddock in the official Rust image
 and copies the binary into a fresh base image. Every test command runs in a new container.
-The base image defaults to `debian:bookworm-slim`; override it with `PADDOCK_TEST_BASE_IMAGE`:
+The base image defaults to `debian:bookworm-slim`; override it with `PADDOCK_TEST_BASE_IMAGE`
+(CI runs every module on both `debian:bookworm-slim` and `debian:trixie-slim`):
 
 ```sh
 PADDOCK_TEST_BASE_IMAGE=ubuntu:24.04 cargo container-tests
@@ -407,7 +429,7 @@ published as a prerelease.
 A release is installed with the `install.sh` from that release, so the URL is the pin:
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.3.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
 ```
 
 [`release/install.sh`](release/install.sh) is the template. `package.sh` writes the version,

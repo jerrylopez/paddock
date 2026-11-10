@@ -4,7 +4,7 @@
 # <major.minor> is a Valkey release series such as 9.1; the latest patch in it
 # is installed. Valkey publishes no Debian repository (bookworm-backports only
 # has 8.0.1), so Paddock installs the official build for Ubuntu 22.04, which
-# runs on Debian 12, checked against its published SHA-256. Moving to a newer
+# runs on Debian 12 and 13, checked against its published SHA-256. Moving to a newer
 # series upgrades; going back to an older one isn't supported.
 #
 # Valkey listens on 127.0.0.1:6379; --password sets `requirepass`. Under
