@@ -87,7 +87,10 @@ Pin-Priority: 1001"
 
 if ! package_installed mariadb-server; then
   info "Installing MariaDB $VERSION"
-  apt_install mariadb-server
+  # The pin replaces Debian's MariaDB packages that are already installed,
+  # such as libmariadb3 from default-libmysqlclient-dev, even when they're
+  # newer (11.8 in Debian 13), so the client and server stay one release.
+  apt_install --allow-downgrades mariadb-server
 fi
 
 # `ping` succeeds whenever the server is up, even if login would be refused.

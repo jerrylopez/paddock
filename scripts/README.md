@@ -103,7 +103,7 @@ A setup that half-worked must not look like success, or a broken snapshot gets c
 | `installed_version PKG` | PKG's installed upstream version (`8.2.10`, without epoch or Debian revision), or nothing |
 | `installed_series PKG [PARTS]` | The first PARTS (default 2) parts of that version: `8.2` |
 | `require_series PKG LABEL` | Usage error unless a release of PKG in the `$VERSION` series is published; lists the series |
-| `apt_install PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing |
+| `apt_install [--allow-downgrades] PKG...` | Installs missing Debian packages, refreshing package lists first only if something is missing; `--allow-downgrades` lets a pin above 1000 replace installed packages with older versions |
 | `apt_update` | Refreshes package lists, at most once per setup unless `apt_source` changed a source |
 | `write_file PATH CONTENT` | Makes PATH contain CONTENT, writing as root only if it differs; sets `WROTE=1` if it wrote |
 | `apt_keyring NAME URL FPR...` | Installs the signing keys at URL as `/etc/apt/keyrings/NAME.gpg`, refusing them unless every fingerprint is listed |

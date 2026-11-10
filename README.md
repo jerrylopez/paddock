@@ -24,7 +24,7 @@ executable with `chmod +x .agents/setup`, and commit it:
 set -euo pipefail
 
 # Paddock itself, pinned to one release.
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.1/install.sh | bash
 
 # The environment this branch needs.
 paddock setup php 8.4 --extensions xdebug
@@ -37,7 +37,7 @@ Every new orb for that branch now comes up with those services installed and run
 ## Installing
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.1/install.sh | bash
 ```
 
 Each release ships its own `install.sh`, with that release's download URL and SHA-256
@@ -68,7 +68,7 @@ it. Paddock bridges the two gaps that would otherwise stop them, only on Debian 
 ## What's pinned
 
 - **Paddock** is pinned by the release in the install URL. A release is one unit: the binary
-  with every install script built in, so `v0.4.0` always runs the same scripts. Nothing is
+  with every install script built in, so `v0.4.1` always runs the same scripts. Nothing is
   fetched at run time. Upgrading Paddock means changing that URL in a commit.
 - **Services** are pinned to a release series: `php 8.4`, `redis 8.2`, `nginx 1.30`, and for
   PostgreSQL the major, `17`. Setup installs the latest patch in the series, so a new orb always
@@ -193,8 +193,10 @@ paddock setup mariadb 12.3 --database app --username app --password secret
 Installs MariaDB Server from [the MariaDB Foundation's repository](https://mariadb.org/download/).
 The version is a release series with a bookworm repository (10.11, 11.4, 11.8 and 12.3 today); the
 repository provides its latest release, and its packages take priority over Debian's own MariaDB.
-On Debian 13, a series without a trixie repository (10.11 and 11.4 today) uses its bookworm one,
-with [bookworm's `libaio1`](#debian-13).
+Debian MariaDB packages that are already installed, such as `libmariadb3` from
+`default-libmysqlclient-dev`, are replaced with the series' packages, even when that's an older
+release (Debian 13 ships 11.8). On Debian 13, a series without a trixie repository (10.11 and
+11.4 today) uses its bookworm one, with [bookworm's `libaio1`](#debian-13).
 
 - Same flags as MySQL. With `--root-password`, root can log in with that password and still
   through the Unix socket (`sudo mariadb`).
@@ -429,7 +431,7 @@ published as a prerelease.
 A release is installed with the `install.sh` from that release, so the URL is the pin:
 
 ```sh
-curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.0/install.sh | bash
+curl -fsSL https://github.com/jerrylopez/paddock/releases/download/v0.4.1/install.sh | bash
 ```
 
 [`release/install.sh`](release/install.sh) is the template. `package.sh` writes the version,

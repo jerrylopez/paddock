@@ -5,6 +5,14 @@ use crate::harness;
 #[test]
 fn creates_database_and_user_under_systemd_and_survives_a_restart() {
     let container = harness::SystemdContainer::start();
+    // Like an orb: Debian's MariaDB client libraries are already installed.
+    // Debian 13's are 11.8, so the 11.4 packages replace them with older ones.
+    container
+        .run(
+            "apt-get update -qq\n\
+             apt-get install -y -qq --no-install-recommends default-libmysqlclient-dev >/dev/null",
+        )
+        .assert_success();
     // Quotes, backslashes and `#` exercise the SQL escaping.
     let password = r#"it's "app" \ #1"#;
     let connect = format!(
@@ -28,7 +36,9 @@ fn creates_database_and_user_under_systemd_and_survives_a_restart() {
             "systemctl is-active mariadb\n\
              {connect}\n\
              MYSQL_PWD=r00t mariadb -uroot -h127.0.0.1 -Nse 'select \"root password ok\"'\n\
-             mariadb -uroot -Nse 'select \"root socket ok\"'"
+             mariadb -uroot -Nse 'select \"root socket ok\"'\n\
+             dpkg-query -W -f='${{db:Status-Status}}\\n' default-libmysqlclient-dev\n\
+             dpkg-query -W -f='${{Version}}\\n' libmariadb3 | cut -d. -f1-2"
         ),
     );
     assert_eq!(
@@ -46,7 +56,7 @@ fn creates_database_and_user_under_systemd_and_survives_a_restart() {
     );
     assert_eq!(
         outcome.section("verify"),
-        "active\napp@% app\nroot password ok\nroot socket ok\n",
+        "active\napp@% app\nroot password ok\nroot socket ok\ninstalled\n1:11.4\n",
         "\n{outcome}"
     );
 
